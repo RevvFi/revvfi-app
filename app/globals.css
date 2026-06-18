@@ -1,26 +1,213 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* ── RevvFi Color System ─────────────────────────────────────────── */
+  --color-background:                #1e100b;
+  --color-surface:                   #1e100b;
+  --color-surface-dim:               #1e100b;
+  --color-surface-bright:            #47352f;
+  --color-surface-container-lowest:  #180b07;
+  --color-surface-container-low:     #271813;
+  --color-surface-container:         #2c1c17;
+  --color-surface-container-high:    #372621;
+  --color-surface-container-highest: #43312b;
+  --color-on-surface:                #fadcd4;
+  --color-on-surface-variant:        #e4beb3;
+  --color-inverse-surface:           #fadcd4;
+  --color-inverse-on-surface:        #3e2c27;
+  --color-outline:                   #ab897f;
+  --color-outline-variant:           #5b4038;
+  --color-surface-tint:              #ffb59e;
+  --color-surface-variant:           #43312b;
+
+  /* Primary – light peach for text, #ff5a1f for CTAs */
+  --color-primary:                   #ffb59e;
+  --color-on-primary:                #5e1700;
+  --color-primary-container:         #ff5a1f;
+  --color-on-primary-container:      #541400;
+  --color-inverse-primary:           #ae3200;
+  --color-primary-fixed:             #ffdbd0;
+  --color-primary-fixed-dim:         #ffb59e;
+  --color-on-primary-fixed:          #3a0b00;
+  --color-on-primary-fixed-variant:  #852400;
+
+  /* Secondary */
+  --color-secondary:                 #ffb68d;
+  --color-on-secondary:              #532200;
+  --color-secondary-container:       #b95502;
+  --color-on-secondary-container:    #fff7f4;
+  --color-secondary-fixed:           #ffdbc9;
+  --color-secondary-fixed-dim:       #ffb68d;
+  --color-on-secondary-fixed:        #321200;
+  --color-on-secondary-fixed-variant:#763300;
+
+  /* Tertiary – blue accent */
+  --color-tertiary:                  #8ecdff;
+  --color-on-tertiary:               #00344f;
+  --color-tertiary-container:        #009ae1;
+  --color-on-tertiary-container:     #002e47;
+  --color-tertiary-fixed:            #cbe6ff;
+  --color-tertiary-fixed-dim:        #8ecdff;
+  --color-on-tertiary-fixed:         #001e30;
+  --color-on-tertiary-fixed-variant: #004b71;
+
+  /* Error */
+  --color-error:                     #ffb4ab;
+  --color-on-error:                  #690005;
+  --color-error-container:           #93000a;
+  --color-on-error-container:        #ffdad6;
+
+  /* On-background */
+  --color-on-background:             #fadcd4;
+
+  /* ── Fonts ───────────────────────────────────────────────────────── */
+  --font-sans: "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", "Courier New", monospace;
+
+  /* ── Border radius ────────────────────────────────────────────────── */
+  --radius-sm: 0.25rem;
+  --radius-DEFAULT: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --radius-full: 9999px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ── Base ──────────────────────────────────────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #1e100b;
+  color: #fadcd4;
+  font-family: "Inter", sans-serif;
+  min-height: 100dvh;
+}
+
+/* ── Custom Scrollbar ──────────────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #1e100b;
+}
+::-webkit-scrollbar-thumb {
+  background: #5b4038;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #ab897f;
+}
+
+/* ── Glass card surface ──────────────────────────────────────────────────── */
+
+.glass-card {
+  background: rgba(44, 28, 23, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ── Gradient text ──────────────────────────────────────────────────────── */
+
+.gradient-text {
+  background: linear-gradient(135deg, #ffb59e 0%, #ff5a1f 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Glow effects ──────────────────────────────────────────────────────── */
+
+.glow-primary {
+  box-shadow: 0 0 20px rgba(255, 90, 31, 0.15);
+}
+
+.glow-primary-sm {
+  box-shadow: 0 0 8px rgba(255, 90, 31, 0.12);
+}
+
+/* ── Mono numbers ──────────────────────────────────────────────────────── */
+
+.mono {
+  font-family: "JetBrains Mono", monospace;
+}
+
+/* ── Animations ────────────────────────────────────────────────────────── */
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.pulse-dot {
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    #2c1c17 0%,
+    #372621 50%,
+    #2c1c17 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* ── Status dot ────────────────────────────────────────────────────────── */
+
+.status-dot::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.status-dot.active::before { background: #4ade80; }
+.status-dot.pending::before { background: #fbbf24; }
+.status-dot.error::before { background: #f87171; }
+.status-dot.inactive::before { background: #6b7280; }
+
+/* ── Selection ─────────────────────────────────────────────────────────── */
+
+::selection {
+  background: rgba(255, 90, 31, 0.25);
+  color: #fadcd4;
+}
+
+/* ── Focus ring ────────────────────────────────────────────────────────── */
+
+:focus-visible {
+  outline: 2px solid #ff5a1f;
+  outline-offset: 2px;
+}
+
+/* ── Recharts ──────────────────────────────────────────────────────────── */
+
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: rgba(255, 255, 255, 0.04);
+}
+
+.recharts-tooltip-wrapper {
+  outline: none;
 }

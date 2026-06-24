@@ -190,6 +190,7 @@ export interface Withdrawal {
   request_id: number;
   position_id: number;
   lender: string;
+  market_address?: string;
   amount: string;
   status: WithdrawalStatus;
   requested_at: number;

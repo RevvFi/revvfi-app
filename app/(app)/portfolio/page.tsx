@@ -212,7 +212,7 @@ export default function PortfolioPage() {
                       <TableCell>
                         {w.status === "pending" && (
                           <Button size="sm" variant="ghost" className="text-xs text-red-400"
-                            onClick={() => cancelWithdrawal.mutate(w.request_id)} loading={cancelWithdrawal.isPending}>
+                            onClick={() => cancelWithdrawal.mutate({ marketAddress: w.market_address ?? "", requestId: w.request_id })} loading={cancelWithdrawal.isPending}>
                             Cancel
                           </Button>
                         )}

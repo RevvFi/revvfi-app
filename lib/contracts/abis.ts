@@ -20,101 +20,17 @@ export const POSITION_NFT_ABI = PositionNFTJson.abi as Abi;
 export const LIQUIDITY_QUEUE_ABI = LiquidityQueueJson.abi as Abi;
 
 // Standard ERC20 ABI for token interactions (USDC, WETH, etc.)
+// Uses modern ABI format with stateMutability (required by viem)
 export const ERC20_ABI = [
-  {
-    constant: true,
-    inputs: [],
-    name: "name",
-    outputs: [{ name: "", type: "string" }],
-    type: "function",
-  },
-  {
-    constant: false,
-    inputs: [
-      { name: "_spender", type: "address" },
-      { name: "_value", type: "uint256" },
-    ],
-    name: "approve",
-    outputs: [{ name: "", type: "bool" }],
-    type: "function",
-  },
-  {
-    constant: true,
-    inputs: [],
-    name: "totalSupply",
-    outputs: [{ name: "", type: "uint256" }],
-    type: "function",
-  },
-  {
-    constant: false,
-    inputs: [
-      { name: "_from", type: "address" },
-      { name: "_to", type: "address" },
-      { name: "_value", type: "uint256" },
-    ],
-    name: "transferFrom",
-    outputs: [{ name: "", type: "bool" }],
-    type: "function",
-  },
-  {
-    constant: true,
-    inputs: [],
-    name: "decimals",
-    outputs: [{ name: "", type: "uint8" }],
-    type: "function",
-  },
-  {
-    constant: true,
-    inputs: [{ name: "_owner", type: "address" }],
-    name: "balanceOf",
-    outputs: [{ name: "balance", type: "uint256" }],
-    type: "function",
-  },
-  {
-    constant: true,
-    inputs: [],
-    name: "symbol",
-    outputs: [{ name: "", type: "string" }],
-    type: "function",
-  },
-  {
-    constant: false,
-    inputs: [
-      { name: "_to", type: "address" },
-      { name: "_value", type: "uint256" },
-    ],
-    name: "transfer",
-    outputs: [{ name: "", type: "bool" }],
-    type: "function",
-  },
-  {
-    constant: true,
-    inputs: [
-      { name: "_owner", type: "address" },
-      { name: "_spender", type: "address" },
-    ],
-    name: "allowance",
-    outputs: [{ name: "", type: "uint256" }],
-    type: "function",
-  },
-  {
-    anonymous: false,
-    inputs: [
-      { indexed: true, name: "from", type: "address" },
-      { indexed: true, name: "to", type: "address" },
-      { indexed: false, name: "value", type: "uint256" },
-    ],
-    name: "Transfer",
-    type: "event",
-  },
-  {
-    anonymous: false,
-    inputs: [
-      { indexed: true, name: "owner", type: "address" },
-      { indexed: true, name: "spender", type: "address" },
-      { indexed: false, name: "value", type: "uint256" },
-    ],
-    name: "Approval",
-    type: "event",
-  },
+  { type: "function", name: "name",        stateMutability: "view",       inputs: [],                                                                                       outputs: [{ name: "",        type: "string"  }] },
+  { type: "function", name: "symbol",      stateMutability: "view",       inputs: [],                                                                                       outputs: [{ name: "",        type: "string"  }] },
+  { type: "function", name: "decimals",    stateMutability: "view",       inputs: [],                                                                                       outputs: [{ name: "",        type: "uint8"   }] },
+  { type: "function", name: "totalSupply", stateMutability: "view",       inputs: [],                                                                                       outputs: [{ name: "",        type: "uint256" }] },
+  { type: "function", name: "balanceOf",   stateMutability: "view",       inputs: [{ name: "_owner",   type: "address" }],                                                  outputs: [{ name: "balance", type: "uint256" }] },
+  { type: "function", name: "allowance",   stateMutability: "view",       inputs: [{ name: "_owner",   type: "address" }, { name: "_spender", type: "address" }],           outputs: [{ name: "",        type: "uint256" }] },
+  { type: "function", name: "approve",     stateMutability: "nonpayable", inputs: [{ name: "_spender", type: "address" }, { name: "_value",   type: "uint256" }],           outputs: [{ name: "",        type: "bool"    }] },
+  { type: "function", name: "transfer",    stateMutability: "nonpayable", inputs: [{ name: "_to",      type: "address" }, { name: "_value",   type: "uint256" }],           outputs: [{ name: "",        type: "bool"    }] },
+  { type: "function", name: "transferFrom",stateMutability: "nonpayable", inputs: [{ name: "_from",    type: "address" }, { name: "_to",      type: "address" }, { name: "_value", type: "uint256" }], outputs: [{ name: "", type: "bool" }] },
+  { type: "event",    name: "Transfer", anonymous: false, inputs: [{ indexed: true,  name: "from",    type: "address" }, { indexed: true,  name: "to",      type: "address" }, { indexed: false, name: "value",   type: "uint256" }] },
+  { type: "event",    name: "Approval", anonymous: false, inputs: [{ indexed: true,  name: "owner",   type: "address" }, { indexed: true,  name: "spender", type: "address" }, { indexed: false, name: "value",   type: "uint256" }] },
 ] as const satisfies Abi;

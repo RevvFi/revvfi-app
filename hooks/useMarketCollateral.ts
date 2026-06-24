@@ -98,7 +98,7 @@ export function calculateMaxBorrow(
   collateralBalance: bigint,
   collateralPrice: bigint, // Price in USD with 8 decimals (e.g., $2000 = 200000000000)
   minCollateralRatio: bigint, // In basis points (e.g., 11000 = 110%)
-  currentDebt: bigint = 0n
+  currentDebt: bigint = BigInt(0)
 ): bigint {
   if (collateralBalance === BigInt(0) || minCollateralRatio === BigInt(0)) {
     return BigInt(0);

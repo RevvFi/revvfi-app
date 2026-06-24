@@ -51,14 +51,14 @@ export default function AnalyticsPage() {
   ] : [];
 
   return (
-    <div className="p-6 space-y-6 max-w-[1400px] mx-auto">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-350 mx-auto">
       <div>
         <h1 className="text-2xl font-semibold text-on-surface">Analytics</h1>
         <p className="text-sm text-on-surface-variant mt-0.5">Protocol-wide performance metrics and historical trends</p>
       </div>
 
       {/* Key metrics */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard label="Total Value Locked" value="$1.42B" trend={{ value: "+13.5% vs last week", positive: true }} sub="Across all markets" />
         <MetricCard label="Active Markets" value={ov?.active_markets ?? "—"} sub={`${ov?.total_markets ?? 0} total`} />
         <MetricCard label="24H Volume" value="$84.5M" trend={{ value: "+7.1% vs average", positive: true }} />

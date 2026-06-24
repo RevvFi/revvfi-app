@@ -47,9 +47,9 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="p-6 space-y-6 max-w-[1400px] mx-auto">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-350 mx-auto">
       {/* Page header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant mb-1">
             Portfolio Overview
@@ -59,14 +59,14 @@ export default function DashboardPage() {
             Real-time performance metrics for your institutional assets
           </p>
         </div>
-        <div className="flex gap-2 shrink-0">
+        <div className="flex gap-2 flex-wrap">
           <Button variant="secondary" size="sm">Export Data</Button>
           <Button variant="secondary" size="sm">Manage Alerts</Button>
         </div>
       </div>
 
       {/* Top Metrics */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {portfolioLoading ? (
           Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} rows={1} />)
         ) : (

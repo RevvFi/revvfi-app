@@ -67,15 +67,19 @@ export default function AuctionsPage() {
 
   async function handleBid() {
     if (!selectedId || !bidAmount || !selectedAuction) return;
+    const auctionMarket = liquidations?.markets.find(
+      (m) => m.address === selectedAuction.market_address
+    );
     await placeBid.mutateAsync({
-      market_address: selectedAuction.market_address,
-      auction_id: selectedId,
-      bid_amount: bidAmount,
+      auctionId: selectedId,
+      bidAmount,
+      borrowAssetAddress: auctionMarket?.borrow_asset.address ?? "",
+      borrowAssetDecimals: auctionMarket?.borrow_asset.decimals ?? 18,
     });
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-[1400px] mx-auto">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-350 mx-auto">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -116,7 +120,7 @@ export default function AuctionsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                 <div className="rounded-lg bg-surface-container-low p-3">
                   <p className="text-xs text-on-surface-variant mb-1">Collateral Amount</p>
                   <p className="text-lg font-bold text-on-surface">{(parseFloat(selectedAuction.collateral_amount) / 1e18).toFixed(2)} ETH</p>
@@ -164,7 +168,7 @@ export default function AuctionsPage() {
               </div>
 
               {/* Bid input */}
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-3">
                 <Input
                   label="Bid Amount"
                   type="number"

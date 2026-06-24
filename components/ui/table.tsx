@@ -12,7 +12,7 @@ export function Table({ className, children, ...props }: React.HTMLAttributes<HT
 
 export function TableHeader({ className, children, ...props }: React.HTMLAttributes<HTMLTableSectionElement>) {
   return (
-    <thead className={cn("border-b border-outline-variant/20", className)} {...props}>
+    <thead className={cn("border-b border-outline-variant/40", className)} {...props}>
       {children}
     </thead>
   );
@@ -20,7 +20,7 @@ export function TableHeader({ className, children, ...props }: React.HTMLAttribu
 
 export function TableBody({ className, children, ...props }: React.HTMLAttributes<HTMLTableSectionElement>) {
   return (
-    <tbody className={cn("divide-y divide-outline-variant/10", className)} {...props}>
+    <tbody className={cn("divide-y divide-outline-variant/20", className)} {...props}>
       {children}
     </tbody>
   );
@@ -31,7 +31,7 @@ export function TableRow({ className, children, onClick, ...props }: React.HTMLA
     <tr
       className={cn(
         "transition-colors",
-        onClick && "cursor-pointer hover:bg-white/[0.02]",
+        onClick && "cursor-pointer hover:bg-white/2",
         className
       )}
       onClick={onClick}
@@ -46,7 +46,7 @@ export function TableHead({ className, children, ...props }: React.ThHTMLAttribu
   return (
     <th
       className={cn(
-        "px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-on-surface-variant",
+        "px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant",
         className
       )}
       {...props}
@@ -75,8 +75,8 @@ export function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 gap-3">
-      <div className="h-12 w-12 rounded-full bg-outline-variant/20 flex items-center justify-center">
-        <span className="text-on-surface-variant text-2xl">∅</span>
+      <div className="h-10 w-10 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface-variant text-xl">
+        ∅
       </div>
       <p className="text-sm font-medium text-on-surface">{title}</p>
       {description && (

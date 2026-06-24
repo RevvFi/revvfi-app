@@ -260,8 +260,8 @@ export interface UnsignedTx {
 export interface BorrowRequest {
   market_address: string;
   amount: string;
-  token_id: number;
   max_apr: number;
+  use_senior_only?: boolean;
 }
 
 export interface RepayRequest {

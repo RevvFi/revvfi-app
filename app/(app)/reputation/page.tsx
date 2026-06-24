@@ -30,7 +30,7 @@ export default function ReputationPage() {
   const scoreColor = reputationColor(score);
 
   return (
-    <div className="p-6 space-y-6 max-w-[1400px] mx-auto">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-350 mx-auto">
       <div>
         <h1 className="text-2xl font-semibold text-on-surface">Reputation</h1>
         <p className="text-sm text-on-surface-variant mt-0.5">On-chain credit reputation derived from borrowing history and protocol behavior</p>

@@ -1,83 +1,85 @@
 @import "tailwindcss";
 
 @theme {
-  /* ── RevvFi Color System ─────────────────────────────────────────── */
-  --color-background:                #1e100b;
-  --color-surface:                   #1e100b;
-  --color-surface-dim:               #1e100b;
-  --color-surface-bright:            #47352f;
-  --color-surface-container-lowest:  #180b07;
-  --color-surface-container-low:     #271813;
-  --color-surface-container:         #2c1c17;
-  --color-surface-container-high:    #372621;
-  --color-surface-container-highest: #43312b;
-  --color-on-surface:                #fadcd4;
-  --color-on-surface-variant:        #e4beb3;
-  --color-inverse-surface:           #fadcd4;
-  --color-inverse-on-surface:        #3e2c27;
-  --color-outline:                   #ab897f;
-  --color-outline-variant:           #5b4038;
-  --color-surface-tint:              #ffb59e;
-  --color-surface-variant:           #43312b;
+  /* ── RevvFi × Hyperliquid color spec ──────────────────────────────── */
+  /* Orange #FF6A00  ·  Black #0A0A0A  ·  Dark gray borders #1A1A1A     */
 
-  /* Primary – light peach for text, #ff5a1f for CTAs */
-  --color-primary:                   #ffb59e;
-  --color-on-primary:                #5e1700;
-  --color-primary-container:         #ff5a1f;
-  --color-on-primary-container:      #541400;
-  --color-inverse-primary:           #ae3200;
-  --color-primary-fixed:             #ffdbd0;
-  --color-primary-fixed-dim:         #ffb59e;
-  --color-on-primary-fixed:          #3a0b00;
-  --color-on-primary-fixed-variant:  #852400;
+  --color-background:                #0A0A0A;
+  --color-surface:                   #0A0A0A;
+  --color-surface-dim:               #060606;
+  --color-surface-bright:            #1A1A1A;
+  --color-surface-container-lowest:  #080808;
+  --color-surface-container-low:     #0E0E0E;
+  --color-surface-container:         #111111;
+  --color-surface-container-high:    #141414;
+  --color-surface-container-highest: #1A1A1A;
 
-  /* Secondary */
-  --color-secondary:                 #ffb68d;
-  --color-on-secondary:              #532200;
-  --color-secondary-container:       #b95502;
-  --color-on-secondary-container:    #fff7f4;
-  --color-secondary-fixed:           #ffdbc9;
-  --color-secondary-fixed-dim:       #ffb68d;
-  --color-on-secondary-fixed:        #321200;
-  --color-on-secondary-fixed-variant:#763300;
+  /* Text */
+  --color-on-surface:                #E6E6E6;
+  --color-on-surface-variant:        #9CA3AF;
+  --color-inverse-surface:           #E6E6E6;
+  --color-inverse-on-surface:        #0A0A0A;
+  --color-on-background:             #E6E6E6;
 
-  /* Tertiary – blue accent */
-  --color-tertiary:                  #8ecdff;
-  --color-on-tertiary:               #00344f;
-  --color-tertiary-container:        #009ae1;
-  --color-on-tertiary-container:     #002e47;
-  --color-tertiary-fixed:            #cbe6ff;
-  --color-tertiary-fixed-dim:        #8ecdff;
-  --color-on-tertiary-fixed:         #001e30;
-  --color-on-tertiary-fixed-variant: #004b71;
+  /* Borders */
+  --color-outline:                   #2D2D2D;
+  --color-outline-variant:           #1A1A1A;
+  --color-surface-tint:              #FF6A00;
+  --color-surface-variant:           #141414;
+
+  /* Primary — #FF6A00 orange brand */
+  --color-primary:                   #FF8C47;
+  --color-on-primary:                #1a0500;
+  --color-primary-container:         #FF6A00;
+  --color-on-primary-container:      #ffffff;
+  --color-inverse-primary:           #cc5500;
+  --color-primary-fixed:             #ffe0cc;
+  --color-primary-fixed-dim:         #FF8C47;
+  --color-on-primary-fixed:          #1a0500;
+  --color-on-primary-fixed-variant:  #8a3a00;
+
+  /* Secondary — neutral grays */
+  --color-secondary:                 #9CA3AF;
+  --color-on-secondary:              #ffffff;
+  --color-secondary-container:       #2D2D2D;
+  --color-on-secondary-container:    #E6E6E6;
+  --color-secondary-fixed:           #3a3a3a;
+  --color-secondary-fixed-dim:       #2D2D2D;
+  --color-on-secondary-fixed:        #E6E6E6;
+  --color-on-secondary-fixed-variant:#9CA3AF;
+
+  /* Tertiary — blue */
+  --color-tertiary:                  #60a5fa;
+  --color-on-tertiary:               #001a30;
+  --color-tertiary-container:        #2563eb;
+  --color-on-tertiary-container:     #ffffff;
+  --color-tertiary-fixed:            #bfdbfe;
+  --color-tertiary-fixed-dim:        #60a5fa;
+  --color-on-tertiary-fixed:         #001a30;
+  --color-on-tertiary-fixed-variant: #1d4ed8;
 
   /* Error */
-  --color-error:                     #ffb4ab;
-  --color-on-error:                  #690005;
-  --color-error-container:           #93000a;
-  --color-on-error-container:        #ffdad6;
+  --color-error:                     #EF4444;
+  --color-on-error:                  #450000;
+  --color-error-container:           #dc2626;
+  --color-on-error-container:        #ffffff;
 
-  /* On-background */
-  --color-on-background:             #fadcd4;
-
-  /* ── Fonts ───────────────────────────────────────────────────────── */
+  /* ── Fonts ─────────────────────────────────────────────────────────── */
   --font-sans: "Inter", sans-serif;
   --font-mono: "JetBrains Mono", "Courier New", monospace;
 
-  /* ── Border radius ────────────────────────────────────────────────── */
-  --radius-sm: 0.25rem;
-  --radius-DEFAULT: 0.5rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 1rem;
-  --radius-xl: 1.5rem;
-  --radius-full: 9999px;
+  /* ── Border radius — tight, exchange-like ──────────────────────────── */
+  --radius-sm:      0.2rem;
+  --radius-DEFAULT: 0.25rem;
+  --radius-md:      0.375rem;
+  --radius-lg:      0.5rem;
+  --radius-xl:      0.75rem;
+  --radius-full:    9999px;
 }
 
-/* ── Base ──────────────────────────────────────────────────────────────── */
+/* ── Base ─────────────────────────────────────────────────────────────────── */
 
-*, *::before, *::after {
-  box-sizing: border-box;
-}
+*, *::before, *::after { box-sizing: border-box; }
 
 html {
   -webkit-font-smoothing: antialiased;
@@ -86,128 +88,151 @@ html {
 }
 
 body {
-  background-color: #1e100b;
-  color: #fadcd4;
+  background-color: #0A0A0A;
+  color: #E6E6E6;
   font-family: "Inter", sans-serif;
   min-height: 100dvh;
 }
 
-/* ── Custom Scrollbar ──────────────────────────────────────────────────── */
+/* ── Scrollbar ────────────────────────────────────────────────────────────── */
 
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #1e100b;
-}
-::-webkit-scrollbar-thumb {
-  background: #5b4038;
-  border-radius: 9999px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #ab897f;
-}
+::-webkit-scrollbar        { width: 4px; height: 4px; }
+::-webkit-scrollbar-track  { background: #0A0A0A; }
+::-webkit-scrollbar-thumb  { background: #2D2D2D; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
 
-/* ── Glass card surface ──────────────────────────────────────────────────── */
+/* ── Mono numbers ─────────────────────────────────────────────────────────── */
 
-.glass-card {
-  background: rgba(44, 28, 23, 0.6);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
+.mono { font-family: "JetBrains Mono", monospace; }
 
-/* ── Gradient text ──────────────────────────────────────────────────────── */
+/* ── Gradient text ────────────────────────────────────────────────────────── */
 
 .gradient-text {
-  background: linear-gradient(135deg, #ffb59e 0%, #ff5a1f 100%);
+  background: linear-gradient(135deg, #FF8C47 0%, #FF6A00 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-/* ── Glow effects ──────────────────────────────────────────────────────── */
+/* ── Glow ─────────────────────────────────────────────────────────────────── */
 
-.glow-primary {
-  box-shadow: 0 0 20px rgba(255, 90, 31, 0.15);
-}
+.glow-primary    { box-shadow: 0 0 20px rgba(255, 106, 0, 0.1); }
+.glow-primary-sm { box-shadow: 0 0 8px  rgba(255, 106, 0, 0.08); }
 
-.glow-primary-sm {
-  box-shadow: 0 0 8px rgba(255, 90, 31, 0.12);
-}
-
-/* ── Mono numbers ──────────────────────────────────────────────────────── */
-
-.mono {
-  font-family: "JetBrains Mono", monospace;
-}
-
-/* ── Animations ────────────────────────────────────────────────────────── */
-
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
-}
-
-.pulse-dot {
-  animation: pulse-dot 1.5s ease-in-out infinite;
-}
+/* ── Shimmer skeleton ─────────────────────────────────────────────────────── */
 
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
 }
 
 .shimmer {
-  background: linear-gradient(
-    90deg,
-    #2c1c17 0%,
-    #372621 50%,
-    #2c1c17 100%
-  );
+  background: linear-gradient(90deg, #111111 0%, #1A1A1A 50%, #111111 100%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
 
-/* ── Status dot ────────────────────────────────────────────────────────── */
+/* ── Pulse dot ────────────────────────────────────────────────────────────── */
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+.pulse-dot { animation: pulse-dot 1.5s ease-in-out infinite; }
+
+/* ── Status dot ───────────────────────────────────────────────────────────── */
 
 .status-dot::before {
   content: "";
   display: inline-block;
-  width: 6px;
-  height: 6px;
+  width: 6px; height: 6px;
   border-radius: 9999px;
   margin-right: 6px;
   vertical-align: middle;
 }
 
-.status-dot.active::before { background: #4ade80; }
-.status-dot.pending::before { background: #fbbf24; }
-.status-dot.error::before { background: #f87171; }
-.status-dot.inactive::before { background: #6b7280; }
+.status-dot.active::before   { background: #22C55E; }
+.status-dot.pending::before  { background: #fbbf24; }
+.status-dot.error::before    { background: #EF4444; }
+.status-dot.inactive::before { background: #2D2D2D; }
 
-/* ── Selection ─────────────────────────────────────────────────────────── */
+/* ── Selection ────────────────────────────────────────────────────────────── */
 
 ::selection {
-  background: rgba(255, 90, 31, 0.25);
-  color: #fadcd4;
+  background: rgba(255, 106, 0, 0.2);
+  color: #E6E6E6;
 }
 
-/* ── Focus ring ────────────────────────────────────────────────────────── */
+/* ── Focus ────────────────────────────────────────────────────────────────── */
 
 :focus-visible {
-  outline: 2px solid #ff5a1f;
+  outline: 1px solid rgba(255, 106, 0, 0.5);
   outline-offset: 2px;
 }
 
-/* ── Recharts ──────────────────────────────────────────────────────────── */
+/* ── Recharts ─────────────────────────────────────────────────────────────── */
 
 .recharts-cartesian-grid-horizontal line,
-.recharts-cartesian-grid-vertical line {
-  stroke: rgba(255, 255, 255, 0.04);
+.recharts-cartesian-grid-vertical line { stroke: rgba(255,255,255,0.04); }
+.recharts-tooltip-wrapper { outline: none; }
+
+/* ── HL-style nav tab ─────────────────────────────────────────────────────── */
+
+.hl-tab {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #9CA3AF;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+  cursor: pointer;
+  text-decoration: none;
 }
 
-.recharts-tooltip-wrapper {
-  outline: none;
+.hl-tab:hover  { color: #E6E6E6; }
+
+.hl-tab.active {
+  color: #FF6A00;
+  border-bottom-color: #FF6A00;
+}
+
+/* ── Market filter tab ────────────────────────────────────────────────────── */
+
+.mkt-tab {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #9CA3AF;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+  cursor: pointer;
+  background: transparent;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+}
+
+.mkt-tab:hover  { color: #E6E6E6; }
+
+.mkt-tab.active {
+  color: #FF6A00;
+  border-bottom-color: #FF6A00;
+}
+
+/* ── Glass card ───────────────────────────────────────────────────────────── */
+
+.glass-card {
+  background: rgba(17, 17, 17, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.05);
 }

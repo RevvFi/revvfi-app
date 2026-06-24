@@ -26,7 +26,7 @@ export default function PortfolioPage() {
   const createWithdrawal = useCreateWithdrawal();
 
   return (
-    <div className="p-6 space-y-6 max-w-[1400px] mx-auto">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-350 mx-auto">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -42,7 +42,7 @@ export default function PortfolioPage() {
       </div>
 
       {/* Top Metrics */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {portfolioLoading ? (
           Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24" />)
         ) : (
@@ -117,7 +117,7 @@ export default function PortfolioPage() {
                       <TableCell>
                         {parseFloat(pos.claimable_amount) > 0 && (
                           <Button size="sm" variant="secondary" className="text-xs"
-                            onClick={() => claimPosition.mutate(pos.token_id)}
+                            onClick={() => claimPosition.mutate({ tokenId: pos.token_id, marketAddress: pos.market_address })}
                             loading={claimPosition.isPending}>
                             Claim
                           </Button>
@@ -169,7 +169,7 @@ export default function PortfolioPage() {
                       <TableCell>
                         {o.status === "active" && (
                           <Button size="sm" variant="ghost" className="text-xs text-red-400"
-                            onClick={() => cancelOffer.mutate(o.offer_id)} loading={cancelOffer.isPending}>
+                            onClick={() => cancelOffer.mutate({ offerId: o.offer_id, marketAddress: o.market_address })} loading={cancelOffer.isPending}>
                             Cancel
                           </Button>
                         )}

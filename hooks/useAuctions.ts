@@ -2,13 +2,13 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { useWriteContract, usePublicClient } from "wagmi";
+import { erc20Abi, parseUnits, type Address } from "viem";
 import { toast } from "sonner";
 import { auctionService } from "@/services/auction.service";
-import { transactionService } from "@/services/transaction.service";
 import { queryKeys } from "@/constants/query-keys";
-import type { LiquidateRequest } from "@/types";
-import { useSendTransaction } from "wagmi";
-import { parseEther } from "viem";
+import { LIQUIDATOR_ABI } from "@/lib/contracts/abis";
+import { CONTRACT_ADDRESSES } from "@/lib/contracts/addresses";
 
 export function useLiquidations() {
   return useQuery({
@@ -49,23 +49,52 @@ export function useCountdown(endTime: number) {
   return remaining;
 }
 
+export interface PlaceBidParams {
+  auctionId: number;
+  bidAmount: string;
+  borrowAssetAddress: string;
+  borrowAssetDecimals: number;
+}
+
 export function usePlaceBid() {
   const qc = useQueryClient();
-  const { sendTransactionAsync } = useSendTransaction();
+  const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient();
 
   return useMutation({
-    mutationFn: async (payload: LiquidateRequest) => {
-      const unsigned = await transactionService.buildLiquidateTx(payload);
-      const hash = await sendTransactionAsync({
-        to: unsigned.to as `0x${string}`,
-        data: unsigned.data as `0x${string}`,
-        value: BigInt(unsigned.value),
+    mutationFn: async ({
+      auctionId,
+      bidAmount,
+      borrowAssetAddress,
+      borrowAssetDecimals,
+    }: PlaceBidParams) => {
+      const bidWei = parseUnits(bidAmount, borrowAssetDecimals);
+      const tokenAddr = borrowAssetAddress as Address;
+
+      // Step 1 — approve Liquidator to pull bid amount from bidder
+      toast.info("Step 1/2: Approving bid spend…");
+      const approveTx = await writeContractAsync({
+        address: tokenAddr,
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [CONTRACT_ADDRESSES.liquidator, bidWei],
       });
-      return hash;
+      await publicClient!.waitForTransactionReceipt({ hash: approveTx });
+
+      // Step 2 — place bid on Liquidator
+      toast.info("Step 2/2: Placing bid on-chain…");
+      const bidTx = await writeContractAsync({
+        address: CONTRACT_ADDRESSES.liquidator,
+        abi: LIQUIDATOR_ABI,
+        functionName: "placeBid",
+        args: [BigInt(auctionId), bidWei],
+      });
+      await publicClient!.waitForTransactionReceipt({ hash: bidTx });
+      return bidTx;
     },
     onSuccess: (hash) => {
       qc.invalidateQueries({ queryKey: queryKeys.auctions.liquidations() });
-      toast.success(`Bid submitted: ${hash.slice(0, 10)}…`);
+      toast.success(`Bid placed: ${hash.slice(0, 10)}…`);
     },
     onError: (e: Error) => toast.error(e.message),
   });

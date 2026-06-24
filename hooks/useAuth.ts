@@ -46,7 +46,7 @@ export function useSIWE() {
         statement: "Sign in to RevvFi Institutional DeFi Platform",
         uri: window.location.origin,
         version: "1",
-        chainId: chain?.id ?? 1,
+        chainId: 31337,
         nonce: nonceResp.nonce,
       });
       const message = siweMsg.prepareMessage();

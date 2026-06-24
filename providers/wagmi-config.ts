@@ -4,16 +4,16 @@ import { coinbaseWallet, injected, walletConnect } from "wagmi/connectors";
 import { localChain, WALLETCONNECT_PROJECT_ID } from "@/constants/chains";
 
 export const wagmiConfig = createConfig({
-  chains: [mainnet, sepolia, localChain],
+  chains: [localChain, mainnet, sepolia],
   connectors: [
     injected({ target: "metaMask" }),
     coinbaseWallet({ appName: "RevvFi Institutional" }),
     walletConnect({ projectId: WALLETCONNECT_PROJECT_ID }),
   ],
   transports: {
+    [localChain.id]: http("http://127.0.0.1:8545"),
     [mainnet.id]: http(),
     [sepolia.id]: http(),
-    [localChain.id]: http(process.env.NEXT_PUBLIC_LOCAL_RPC_URL),
   },
   ssr: true,
 });

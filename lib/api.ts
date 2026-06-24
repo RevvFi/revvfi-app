@@ -9,7 +9,7 @@ export const apiClient = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-// Attach JWT from localStorage on every request BUG - this will not work in SSR contexts, but is fine for client-side usage. Consider using cookies or a more robust auth solution for SSR.
+// Attach JWT from localStorage on every request (client-side only)
 apiClient.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
     const token = localStorage.getItem("revvfi_jwt");
@@ -20,10 +20,19 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-// Normalize error shape
+// Normalize errors; clear auth state on 401
 apiClient.interceptors.response.use(
   (res) => res,
   (err: AxiosError<ApiError>) => {
+    if (err.response?.status === 401 && typeof window !== "undefined") {
+      // Clear stored token so user is prompted to re-authenticate
+      localStorage.removeItem("revvfi_jwt");
+      // Dynamic import avoids circular dep at module load time
+      import("@/store/auth.store").then(({ useAuthStore }) => {
+        useAuthStore.getState().logout();
+      });
+    }
+
     const msg =
       err.response?.data?.error?.message ??
       err.message ??

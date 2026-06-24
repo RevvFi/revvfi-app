@@ -9,19 +9,19 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, EmptyState } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatAddress, formatAPR, formatTimestamp } from "@/lib/utils";
+import { formatAddress, formatAPR } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth.store";
-import { Info, Zap, RefreshCw } from "lucide-react";
+import { Info, Zap, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
+import { MarketSelector } from "@/components/MarketSelector";
 
 export default function LendPage() {
   const { address } = useAccount();
   const { isAuthenticated } = useAuthStore();
   const { data: portfolio } = usePortfolio();
-  const { data: myOffers, isLoading: offersLoading } = useOffers();
+  const { data: myOffers, isLoading: offersLoading } = useOffers({ lender: address });
   const { data: markets } = useMarkets({ is_active: true });
   const createOffer = useCreateOffer();
   const cancelOffer = useCancelOffer();
@@ -39,9 +39,15 @@ export default function LendPage() {
     setForm((f) => ({ ...f, [k]: v }));
   }
 
+  const selectedMarket = markets?.markets.find((m) => m.address === form.market_address);
+
   async function handleCreate() {
     if (!form.market_address || !form.amount) {
       toast.error("Please fill all required fields");
+      return;
+    }
+    if (!selectedMarket) {
+      toast.error("Selected market not found");
       return;
     }
     await createOffer.mutateAsync({
@@ -50,6 +56,9 @@ export default function LendPage() {
       apr: parseInt(form.apr),
       seniority: parseInt(form.seniority) as 0 | 1,
       expiry_days: parseInt(form.expiry_days),
+      // required for on-chain approve step
+      borrow_asset_address: selectedMarket.borrow_asset.address,
+      borrow_asset_decimals: selectedMarket.borrow_asset.decimals,
     });
     setForm({ market_address: "", amount: "", apr: "1250", seniority: "0", expiry_days: "90" });
   }
@@ -58,7 +67,7 @@ export default function LendPage() {
   const avgAPR = portfolio?.avg_apr ?? 0;
 
   return (
-    <div className="p-6 space-y-6 max-w-[1400px] mx-auto">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-350 mx-auto">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -67,35 +76,42 @@ export default function LendPage() {
             Optimize your yield by providing liquidity to institutionally vetted credit markets
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" size="sm">History</Button>
-          <Button variant="secondary" size="sm">Export CSV</Button>
-        </div>
       </div>
 
       {/* Top metrics */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="p-4">
           <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Total Deposited</p>
           <p className="text-2xl font-bold text-on-surface mt-1 mono">${(parseFloat(totalDeposited) / 1e6).toFixed(2)}M</p>
-          <p className="text-xs text-emerald-400 mt-0.5">+12.5% this month</p>
         </Card>
         <Card className="p-4">
           <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Average APR</p>
           <p className="text-2xl font-bold text-primary mt-1 mono">{(avgAPR / 100).toFixed(2)}%</p>
-          <p className="text-xs text-on-surface-variant mt-0.5">0.8% above market</p>
         </Card>
         <Card className="p-4">
           <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Open Offers</p>
           <p className="text-2xl font-bold text-on-surface mt-1">{myOffers?.count ?? 0}</p>
-          <p className="text-xs text-on-surface-variant mt-0.5">Active assets</p>
         </Card>
         <Card className="p-4 border-primary-container/20">
-          <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Claimable Funds</p>
-          <p className="text-2xl font-bold text-primary mt-1 mono">${(parseFloat(portfolio?.earned_interest ?? "0") / 1e6).toFixed(2)}</p>
-          <Button size="sm" className="mt-2 w-full" onClick={() => claimPosition.mutate(1)}>Claim Now</Button>
+          <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Earned Interest</p>
+          <p className="text-2xl font-bold text-primary mt-1 mono">
+            ${(parseFloat(portfolio?.earned_interest ?? "0") / 1e6).toFixed(4)}M
+          </p>
         </Card>
       </div>
+
+      {/* Info banner for lenders */}
+      <Card className="p-4 border-blue-400/20 bg-blue-400/5">
+        <div className="flex items-center gap-3">
+          <TrendingUp className="h-5 w-5 text-blue-400 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-on-surface">Open Market Lending</p>
+            <p className="text-xs text-on-surface-variant mt-0.5">
+              Any lender can create offers for any market. Choose your target market, set your APR, and provide liquidity.
+            </p>
+          </div>
+        </div>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* New Offer Form */}
@@ -106,71 +122,109 @@ export default function LendPage() {
           </div>
           <div className="space-y-4">
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant block mb-1.5">Asset & Market</label>
-              <select
-                className="h-10 w-full rounded border border-outline-variant/50 bg-surface-container-low px-3 text-sm text-on-surface focus:border-primary-container focus:outline-none"
+              <label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant block mb-1.5">
+                Select Market to Lend To
+              </label>
+              <MarketSelector
                 value={form.market_address}
-                onChange={(e) => setField("market_address", e.target.value)}
-              >
-                <option value="">Select market...</option>
-                {markets?.markets.map((m) => (
-                  <option key={m.address} value={m.address}>
-                    {m.borrow_asset.symbol || "USDC"} — {formatAddress(m.address)}
-                  </option>
-                ))}
-              </select>
+                onValueChange={(value) => setField("market_address", value)}
+                showBadge={false}
+                filterByLender={false}
+              />
+              {selectedMarket && (
+                <div className="mt-2 p-2 bg-surface-container-low rounded text-xs">
+                  <span className="text-on-surface-variant">Borrower:</span>{" "}
+                  <span className="font-mono text-on-surface">{formatAddress(selectedMarket.borrower)}</span>
+                </div>
+              )}
             </div>
 
-            <Input label="Amount (USDC)" type="number" placeholder="0.00" value={form.amount}
-              onChange={(e) => setField("amount", e.target.value)} suffix="USDC"
-              hint={`Available: ${(parseFloat(totalDeposited) / 1e6).toFixed(2)}M USDC`} />
+            <Input
+              label={`Amount (${selectedMarket?.borrow_asset.symbol ?? "USDC"})`}
+              type="number"
+              placeholder="0.00"
+              value={form.amount}
+              onChange={(e) => setField("amount", e.target.value)}
+              suffix={selectedMarket?.borrow_asset.symbol ?? "USDC"}
+              hint="Token approval + on-chain submit required"
+            />
 
             <div className="grid grid-cols-2 gap-3">
-              <Input label="APR (BPS)" type="number" placeholder="1250" value={form.apr}
-                onChange={(e) => setField("apr", e.target.value)} hint={`= ${(parseInt(form.apr) / 100).toFixed(2)}%`} />
+              <Input
+                label="APR (BPS)"
+                type="number"
+                placeholder="1250"
+                value={form.apr}
+                onChange={(e) => setField("apr", e.target.value)}
+                hint={`= ${(parseInt(form.apr || "0") / 100).toFixed(2)}%`}
+              />
               <div>
-                <label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant block mb-1.5">Seniority</label>
+                <label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant block mb-1.5">
+                  Seniority
+                </label>
                 <select
                   className="h-10 w-full rounded border border-outline-variant/50 bg-surface-container-low px-3 text-sm text-on-surface focus:border-primary-container focus:outline-none"
                   value={form.seniority}
                   onChange={(e) => setField("seniority", e.target.value as "0" | "1")}
                 >
-                  <option value="0">Senior Tranche</option>
-                  <option value="1">Junior Tranche</option>
+                  <option value="0">Senior</option>
+                  <option value="1">Junior</option>
                 </select>
               </div>
             </div>
 
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant block mb-1.5">Duration (Days)</label>
-              <input type="range" min={7} max={365} value={parseInt(form.expiry_days)}
+              <label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant block mb-1.5">
+                Duration: <span className="text-on-surface">{form.expiry_days}d</span>
+              </label>
+              <input
+                type="range"
+                min={7}
+                max={365}
+                value={parseInt(form.expiry_days)}
                 onChange={(e) => setField("expiry_days", e.target.value)}
-                className="w-full accent-primary-container" />
+                className="w-full accent-primary-container"
+              />
               <div className="flex justify-between text-xs text-on-surface-variant mt-1">
-                <span>7d</span><span className="font-medium text-on-surface">{form.expiry_days}d</span><span>365d</span>
+                <span>7d</span><span>365d</span>
               </div>
             </div>
 
-            <div className="rounded-lg bg-surface-container-low p-3 space-y-2 text-sm">
+            <div className="rounded-lg bg-surface-container-low p-3 space-y-1.5 text-sm">
               <div className="flex justify-between">
-                <span className="text-on-surface-variant">Estimated Return</span>
-                <span className="text-emerald-400 font-medium">+${((parseFloat(form.amount || "0") * (parseInt(form.apr) / 10000) * (parseInt(form.expiry_days) / 365)) / 1e6).toFixed(4)}M</span>
+                <span className="text-on-surface-variant">Fixed APR</span>
+                <span className="text-on-surface font-semibold">
+                  {(parseInt(form.apr || "0") / 100).toFixed(2)}%
+                </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-on-surface-variant">Protocol Fee (0.1%)</span>
-                <span className="text-on-surface-variant">-${((parseFloat(form.amount || "0") * 0.001) / 1e6).toFixed(6)}M</span>
+                <span className="text-on-surface-variant">Est. Interest Earned</span>
+                <span className="text-emerald-400 font-medium">
+                  +{((parseFloat(form.amount || "0") * (parseInt(form.apr || "0") / 10000) * (parseInt(form.expiry_days) / 365))).toFixed(2)} {selectedMarket?.borrow_asset.symbol ?? "USDC"}
+                </span>
+              </div>
+              <div className="flex justify-between border-t border-outline-variant/20 pt-1.5">
+                <span className="text-on-surface-variant font-medium">Total at Maturity</span>
+                <span className="text-on-surface font-bold">
+                  {(parseFloat(form.amount || "0") + (parseFloat(form.amount || "0") * (parseInt(form.apr || "0") / 10000) * (parseInt(form.expiry_days) / 365))).toFixed(2)} {selectedMarket?.borrow_asset.symbol ?? "USDC"}
+                </span>
               </div>
             </div>
 
             <div className="flex items-center gap-2 rounded-lg bg-surface-container-low p-3">
               <Zap className="h-4 w-4 text-primary" />
-              <div>
-                <p className="text-xs font-semibold text-on-surface">Auto-Compound Enabled</p>
-                <p className="text-xs text-on-surface-variant">Rewards reinvested into senior tranches</p>
-              </div>
+              <p className="text-xs text-on-surface">
+                Two MetaMask signatures required: approve + submit offer
+              </p>
             </div>
 
-            <Button className="w-full" size="lg" onClick={handleCreate} loading={createOffer.isPending} disabled={!isAuthenticated}>
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={handleCreate}
+              loading={createOffer.isPending}
+              disabled={!isAuthenticated || !selectedMarket}
+            >
               SUBMIT MARKET OFFER
             </Button>
           </div>
@@ -179,27 +233,18 @@ export default function LendPage() {
         {/* Active Placements */}
         <div className="lg:col-span-3">
           <Card>
-            <div className="flex items-center justify-between p-5 pb-3">
-              <div className="flex items-center gap-2">
-                <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Active Market Placements</p>
-                <span className="flex items-center gap-1 rounded-full bg-emerald-400/10 px-2 py-0.5 text-xs text-emerald-400">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 pulse-dot" />
-                  LIVE
-                </span>
-              </div>
-              <div className="flex gap-1">
-                {["Active", "Pending", "Closed"].map((t) => (
-                  <button key={t} className={`px-3 py-1 text-xs rounded-full transition-colors ${t === "Active" ? "bg-primary-container/20 text-primary" : "text-on-surface-variant hover:text-on-surface"}`}>{t}</button>
-                ))}
-              </div>
+            <div className="p-5 pb-3">
+              <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                Active Market Placements
+              </p>
             </div>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Asset</TableHead>
+                  <TableHead>Market</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
-                  <TableHead className="text-right">Yield / APR</TableHead>
-                  <TableHead>Risk Tier</TableHead>
+                  <TableHead className="text-right">APR</TableHead>
+                  <TableHead>Seniority</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead />
                 </TableRow>
@@ -216,28 +261,27 @@ export default function LendPage() {
                 ) : myOffers?.offers.length ? (
                   myOffers.offers.map((o) => (
                     <TableRow key={o.offer_id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="h-7 w-7 rounded-full bg-primary-container/10 flex items-center justify-center text-xs font-bold text-primary">U</div>
-                          <div>
-                            <p className="text-sm font-medium">USDC</p>
-                            <p className="text-xs text-on-surface-variant">Offer #{o.offer_id}</p>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right mono">${(parseFloat(o.amount) / 1e6).toFixed(2)}M</TableCell>
+                      <TableCell className="mono text-xs">{formatAddress(o.market_address, 4)}</TableCell>
+                      <TableCell className="text-right mono">{(parseFloat(o.amount) / 1e6).toFixed(2)}M</TableCell>
                       <TableCell className="text-right">
-                        <p className="text-primary font-bold">{formatAPR(o.apr)}</p>
+                        <span className="text-primary font-bold">{formatAPR(o.apr)}</span>
                       </TableCell>
                       <TableCell>
                         <span className={`text-xs font-medium ${o.seniority === 0 ? "text-emerald-400" : "text-amber-400"}`}>
-                          {o.seniority === 0 ? "● Senior" : "● Mezzanine"}
+                          {o.seniority === 0 ? "Senior" : "Junior"}
                         </span>
                       </TableCell>
                       <TableCell><StatusBadge status={o.status} /></TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="sm" className="text-xs text-red-400"
-                          onClick={() => cancelOffer.mutate(o.offer_id)} loading={cancelOffer.isPending}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs text-red-400"
+                          onClick={() =>
+                            cancelOffer.mutate({ offerId: o.offer_id, marketAddress: o.market_address })
+                          }
+                          loading={cancelOffer.isPending}
+                        >
                           Cancel
                         </Button>
                       </TableCell>
@@ -246,18 +290,28 @@ export default function LendPage() {
                 ) : (
                   <TableRow>
                     <TableCell colSpan={6}>
-                      <EmptyState title="No active offers" description="Create your first lending offer to start earning yield" />
+                      <EmptyState
+                        title="No active offers"
+                        description="Create your first lending offer to start earning yield"
+                      />
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
-            {myOffers && (
-              <div className="px-4 py-2 border-t border-outline-variant/10 text-xs text-on-surface-variant">
-                Showing {Math.min(3, myOffers.count)} of {myOffers.count} active offers
-              </div>
-            )}
           </Card>
+
+          {/* Claimable positions */}
+          {portfolio && parseFloat(portfolio.earned_interest) > 0 && (
+            <Card className="mt-4 p-5">
+              <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant mb-3">
+                Claimable Positions
+              </p>
+              <p className="text-sm text-on-surface-variant">
+                Use the Portfolio page to claim individual positions (requires market address + position token ID).
+              </p>
+            </Card>
+          )}
         </div>
       </div>
     </div>

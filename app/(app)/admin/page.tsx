@@ -1,496 +1,818 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAccount, useSendTransaction } from "wagmi";
-import { useAuthStore } from "@/store/auth.store";
-import { adminService } from "@/services/admin.service";
-import { queryKeys } from "@/constants/query-keys";
-import { Card, MetricCard } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { StatusBadge } from "@/components/ui/badge";
+import { useAccount } from "wagmi";
+import { useAdminCheck } from "@/hooks/useAdminCheck";
+import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, EmptyState } from "@/components/ui/table";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatAddress, formatTimestamp, formatRelativeTime, formatAPR } from "@/lib/utils";
-import { Shield, AlertTriangle, Download, CheckCircle, XCircle, RefreshCw, Pause, Play, Search, ChevronDown } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { formatAddress } from "@/lib/utils";
 import { toast } from "sonner";
+import { Shield, Settings, Users, BarChart3, Gavel, DollarSign } from "lucide-react";
+import { formatEther } from "viem";
 
-// ── Sections ────────────────────────────────────────────────────────────────
+// Import all admin hooks
+import {
+  useSetDeploymentFee,
+  useSetFeeRecipient,
+  useDeploymentFee,
+  useFeeRecipient,
+} from "@/hooks/useFactory";
 
-function OverviewSection() {
-  const { data: overview } = useQuery({ queryKey: queryKeys.admin.statsOverview, queryFn: adminService.getStatsOverview });
-  const { data: health } = useQuery({ queryKey: queryKeys.admin.health, queryFn: adminService.getHealth, refetchInterval: 30000 });
-  const { data: fees } = useQuery({ queryKey: queryKeys.admin.feesCollected, queryFn: adminService.getFeesCollected });
+import {
+  useRegisterBorrower,
+  useRemoveBorrower,
+  useAddBlacklist,
+  useRemoveBlacklist,
+} from "@/hooks/useArchController";
 
-  const ov = overview?.data;
-  const h = health?.data;
+import {
+  usePauseMarket,
+  useUnpauseMarket,
+  useSetGuardian,
+  useEndLiquidation,
+  useMarketStatus,
+} from "@/hooks/useMarketAdmin";
 
-  return (
-    <div className="space-y-5">
-      {/* Health banner */}
-      <div className={`rounded-lg border p-3 flex items-center gap-3 ${h?.status === "healthy" ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-400/30 bg-amber-400/5"}`}>
-        {h?.status === "healthy"
-          ? <CheckCircle className="h-5 w-5 text-emerald-400 shrink-0" />
-          : <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0" />}
-        <div className="flex-1">
-          <p className="text-sm font-semibold text-on-surface">System Status: <span className={h?.status === "healthy" ? "text-emerald-400" : "text-amber-400"}>{h?.status ?? "checking..."}</span></p>
-          <p className="text-xs text-on-surface-variant">
-            {h ? `Markets: ${h.total_markets} · Positions: ${h.active_positions}` : "Loading..."}
-          </p>
-        </div>
-        <div className="flex gap-4 text-xs text-right shrink-0">
-          <div><p className="text-on-surface-variant">Markets</p><p className="font-bold text-on-surface">{h?.total_markets ?? "—"}</p></div>
-          <div><p className="text-on-surface-variant">TVL</p><p className="font-bold text-emerald-400">{h ? `$${(parseFloat(h.total_tvl) / 1e6).toFixed(2)}M` : "—"}</p></div>
-        </div>
-      </div>
+import {
+  useSetAuctionDuration,
+  useSetMinBidIncrementBps,
+  useSetAuctionExtensionWindow,
+  useSetDutchAuctionParams,
+  useCancelAuction,
+  useAuctionParams,
+} from "@/hooks/useLiquidatorAdmin";
 
-      {/* Key metrics */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard label="Total TVL" value={`$${(parseFloat(ov?.total_liquidity_wei ?? "0") / 1e6).toFixed(2)}M`} sub="Protocol liquidity" />
-        <MetricCard label="Active Markets" value={ov?.active_markets ?? "—"} sub={`${ov?.total_markets ?? 0} total`} />
-        <MetricCard label="Active Borrowers" value={ov?.active_borrowers ?? "—"} sub={`${ov?.total_borrowers ?? 0} registered`} />
-        <MetricCard label="Fees Collected" value={`${(parseFloat(fees?.data?.total_fees_eth ?? "0")).toFixed(4)} ETH`} sub={formatAddress(fees?.data?.recipient_address ?? "")} />
-      </div>
+import {
+  useSetMinCollateralRatio,
+  useSetLiquidationThreshold,
+  useCollateralParams,
+} from "@/hooks/useEscrowAdmin";
 
-      {/* Protocol config */}
-      <ProtocolConfigPanel />
-    </div>
-  );
-}
+import {
+  useSetOraclePrice,
+  useOraclePrice,
+} from "@/hooks/useOracleAdmin";
 
-function ProtocolConfigPanel() {
-  const { data: cfg } = useQuery({ queryKey: queryKeys.admin.protocolConfig, queryFn: adminService.getProtocolConfig });
-  const { data: sys } = useQuery({ queryKey: queryKeys.admin.systemConfig, queryFn: adminService.getSystemConfig });
-  const c = cfg?.data;
+import { MarketSelector } from "@/components/MarketSelector";
+import { useMarkets } from "@/hooks/useMarkets";
 
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <Card className="p-5">
-        <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant mb-4">Protocol Config</p>
-        {c ? (
-          <div className="space-y-2.5">
-            {[
-              ["Deployment Fee", `${c.deployment_fee_eth} ETH`],
-              ["Fee Recipient", formatAddress(c.fee_recipient)],
-              ["Arch Controller", formatAddress(c.arch_controller)],
-              ["Position NFT", formatAddress(c.position_nft)],
-              ["Liquidator", formatAddress(c.liquidator)],
-              ["Timelock Delay", `${c.timelock_delay_days} days`],
-              ["Core Contracts Set", c.is_core_contracts_set ? "Yes" : "No"],
-            ].map(([k, v]) => (
-              <div key={k} className="flex justify-between text-sm">
-                <span className="text-on-surface-variant">{k}</span>
-                <span className="mono font-medium text-on-surface">{v}</span>
-              </div>
-            ))}
-          </div>
-        ) : <Skeleton className="h-40" />}
-      </Card>
+// Contract addresses from env
+const FACTORY_ADDRESS = (process.env.NEXT_PUBLIC_FACTORY_ADDRESS || "") as `0x${string}`;
+const LIQUIDATOR_ADDRESS = (process.env.NEXT_PUBLIC_LIQUIDATOR_ADDRESS || "") as `0x${string}`;
 
-      <Card className="p-5">
-        <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant mb-4">System Config ({sys?.data?.total ?? 0} entries)</p>
-        <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-          {sys?.data?.configs?.map((cfg) => (
-            <div key={cfg.key} className="flex justify-between text-sm py-1 border-b border-outline-variant/10">
-              <span className="text-on-surface-variant text-xs mono">{cfg.key}</span>
-              <span className="text-xs font-medium text-on-surface mono">{cfg.value}</span>
-            </div>
-          )) ?? <Skeleton className="h-32" />}
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-function BorrowersSection() {
-  const [search, setSearch] = useState("");
-  const { data, isLoading } = useQuery({ queryKey: queryKeys.admin.borrowers(), queryFn: () => adminService.getBorrowers() });
-  const { data: pending } = useQuery({ queryKey: queryKeys.admin.pendingBorrowers, queryFn: adminService.getPendingBorrowers });
-
-  const borrowers = data?.data?.borrowers ?? [];
-  const filtered = search ? borrowers.filter(b => b.address.toLowerCase().includes(search.toLowerCase())) : borrowers;
-
-  return (
-    <div className="space-y-4">
-      {pending?.data?.pending_count ? (
-        <div className="rounded-lg border border-amber-400/30 bg-amber-400/5 p-3 flex items-center gap-3">
-          <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
-          <p className="text-sm text-amber-400">{pending.data.pending_count} borrower registration(s) pending approval</p>
-        </div>
-      ) : null}
-
-      <div className="flex items-center gap-2">
-        <div className="relative max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-on-surface-variant" />
-          <input
-            className="h-10 w-full rounded border border-outline-variant/50 bg-surface-container-low pl-9 pr-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:border-primary-container focus:outline-none"
-            placeholder="Search by wallet address..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
-        <p className="text-xs text-on-surface-variant">{filtered.length} of {borrowers.length} borrowers</p>
-      </div>
-
-      <Card className="p-0 overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Address</TableHead>
-              <TableHead className="text-right">Rep Score</TableHead>
-              <TableHead className="text-right">Active Offers</TableHead>
-              <TableHead className="text-right">Defaults</TableHead>
-              <TableHead className="text-right">Total Borrowed</TableHead>
-              <TableHead className="text-right">Total Repaid</TableHead>
-              <TableHead>Verified</TableHead>
-              <TableHead>Registered</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>{Array.from({ length: 8 }).map((_, j) => <TableCell key={j}><Skeleton className="h-4" /></TableCell>)}</TableRow>
-              ))
-            ) : filtered.length ? (
-              filtered.map((b) => (
-                <TableRow key={b.address}>
-                  <TableCell><span className="mono text-xs">{formatAddress(b.address)}</span></TableCell>
-                  <TableCell className="text-right font-bold text-primary">{b.reputation_score}</TableCell>
-                  <TableCell className="text-right">{b.active_offers}</TableCell>
-                  <TableCell className="text-right"><span className={b.default_count > 0 ? "text-red-400" : "text-emerald-400"}>{b.default_count}</span></TableCell>
-                  <TableCell className="text-right mono">${(parseFloat(b.total_borrowed) / 1e6).toFixed(2)}M</TableCell>
-                  <TableCell className="text-right mono">${(parseFloat(b.total_repaid) / 1e6).toFixed(2)}M</TableCell>
-                  <TableCell><StatusBadge status={b.is_verified ? "active" : "inactive"} /></TableCell>
-                  <TableCell className="text-xs text-on-surface-variant">{formatTimestamp(b.added_at)}</TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow><TableCell colSpan={8}><EmptyState title="No borrowers" /></TableCell></TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </Card>
-    </div>
-  );
-}
-
-function MarketsSection() {
-  const { data, isLoading } = useQuery({ queryKey: queryKeys.admin.markets(), queryFn: () => adminService.getMarkets() });
-  const qc = useQueryClient();
-  const markets = data?.data?.markets ?? [];
-
-  const toggleStatus = useMutation({
-    mutationFn: ({ address, is_active }: { address: string; is_active: boolean }) =>
-      adminService.updateMarketStatus(address, { is_active }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.admin.markets() });
-      toast.success("Market status updated");
-    },
-  });
-
-  return (
-    <Card className="p-0 overflow-hidden">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Address</TableHead>
-            <TableHead className="text-right">TVL</TableHead>
-            <TableHead className="text-right">Available</TableHead>
-            <TableHead className="text-right">Utilization</TableHead>
-            <TableHead className="text-right">Avg APR</TableHead>
-            <TableHead>Borrower</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {isLoading ? (
-            Array.from({ length: 4 }).map((_, i) => (
-              <TableRow key={i}>{Array.from({ length: 8 }).map((_, j) => <TableCell key={j}><Skeleton className="h-4" /></TableCell>)}</TableRow>
-            ))
-          ) : markets.length ? (
-            markets.map((m) => (
-              <TableRow key={m.address}>
-                <TableCell><span className="mono text-xs">{formatAddress(m.address)}</span></TableCell>
-                <TableCell className="text-right mono">${(parseFloat(m.total_liquidity) / 1e6).toFixed(2)}M</TableCell>
-                <TableCell className="text-right mono">${(parseFloat(m.total_principal) / 1e6).toFixed(2)}M</TableCell>
-                <TableCell className="text-right">{m.utilization_rate.toFixed(1)}%</TableCell>
-                <TableCell className="text-right"><span className="text-primary">{formatAPR(m.weighted_apr)}</span></TableCell>
-                <TableCell><span className="mono text-xs">{formatAddress(m.borrower)}</span></TableCell>
-                <TableCell><StatusBadge status={m.is_active ? "active" : "inactive"} /></TableCell>
-                <TableCell>
-                  <Button size="sm" variant="ghost" className="text-xs"
-                    onClick={() => toggleStatus.mutate({ address: m.address, is_active: !m.is_active })}
-                    loading={toggleStatus.isPending}>
-                    {m.is_active ? "Pause" : "Activate"}
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))
-          ) : (
-            <TableRow><TableCell colSpan={8}><EmptyState title="No markets" /></TableCell></TableRow>
-          )}
-        </TableBody>
-      </Table>
-    </Card>
-  );
-}
-
-function AuditSection() {
-  const { data: logs, isLoading } = useQuery({ queryKey: queryKeys.admin.auditLogs(), queryFn: () => adminService.getAuditLogs() });
-  const { data: stats } = useQuery({ queryKey: queryKeys.admin.auditStats, queryFn: adminService.getAuditStats });
-
-  const auditLogs = logs?.data?.logs ?? [];
-  const s = stats?.data;
-
-  async function handleExport() {
-    const res = await adminService.exportAudit();
-    const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `audit-${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success(`Exported ${res.data.total_records} audit records`);
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {s ? (
-          <>
-            <Card className="p-3"><p className="text-xs text-on-surface-variant">Total Actions</p><p className="text-xl font-bold text-on-surface">{s.total_actions}</p></Card>
-            <Card className="p-3"><p className="text-xs text-on-surface-variant">Last 24h</p><p className="text-xl font-bold text-on-surface">{s.recent_activity_24h}</p></Card>
-            <Card className="p-3"><p className="text-xs text-on-surface-variant">Action Types</p><p className="text-xl font-bold text-on-surface">{Object.keys(s.action_breakdown).length}</p></Card>
-            <Card className="p-3"><p className="text-xs text-on-surface-variant">Success Rate</p><p className="text-xl font-bold text-emerald-400">{s.success_rate.toFixed(0)}%</p></Card>
-          </>
-        ) : Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16" />)}
-      </div>
-
-      <div className="flex justify-end">
-        <Button variant="secondary" size="sm" onClick={handleExport} className="gap-2">
-          <Download className="h-3.5 w-3.5" /> Export JSON
-        </Button>
-      </div>
-
-      <Card className="p-0 overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Time</TableHead>
-              <TableHead>Actor</TableHead>
-              <TableHead>Action</TableHead>
-              <TableHead>Target</TableHead>
-              <TableHead>IP</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 8 }).map((_, i) => (
-                <TableRow key={i}>{Array.from({ length: 5 }).map((_, j) => <TableCell key={j}><Skeleton className="h-4" /></TableCell>)}</TableRow>
-              ))
-            ) : auditLogs.length ? (
-              auditLogs.map((log) => (
-                <TableRow key={log.id}>
-                  <TableCell className="text-xs text-on-surface-variant">{formatRelativeTime(log.created_at)}</TableCell>
-                  <TableCell><span className="mono text-xs">{log.admin_address ? formatAddress(log.admin_address) : "—"}</span></TableCell>
-                  <TableCell><span className="rounded px-2 py-0.5 bg-primary-container/10 text-primary text-xs">{log.action}</span></TableCell>
-                  <TableCell><span className="mono text-xs text-on-surface-variant">{log.target_address ? formatAddress(log.target_address) : "—"}</span></TableCell>
-                  <TableCell className="text-xs text-on-surface-variant">{log.target_type}</TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow><TableCell colSpan={5}><EmptyState title="No audit logs" /></TableCell></TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </Card>
-    </div>
-  );
-}
-
-function LiquidatorSection() {
-  const { data: cfg } = useQuery({ queryKey: queryKeys.admin.liquidatorConfig, queryFn: adminService.getLiquidatorConfig });
-  const { data: auctions } = useQuery({ queryKey: queryKeys.admin.liquidatorAuctions, queryFn: adminService.getLiquidatorAuctions });
-  const c = cfg?.data;
-
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <Card className="p-5">
-        <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant mb-4">Liquidator Config</p>
-        {c ? (
-          <div className="space-y-2.5">
-            {[
-              ["Auction Duration", `${c.auction_duration_seconds}s`],
-              ["Price Drop Rate", `${c.price_drop_rate_bps} BPS`],
-              ["Min Bid Increment", `${c.min_bid_increment_bps} BPS`],
-              ["Liq. Incentive", `${c.liquidation_incentive_bps} BPS`],
-              ["Max Slippage", `${c.max_slippage_bps} BPS`],
-              ["Updated By", c.updated_by || "—"],
-            ].map(([k, v]) => (
-              <div key={k} className="flex justify-between text-sm">
-                <span className="text-on-surface-variant">{k}</span>
-                <span className="font-medium mono text-on-surface">{String(v)}</span>
-              </div>
-            ))}
-          </div>
-        ) : <Skeleton className="h-40" />}
-      </Card>
-
-      <Card className="p-5">
-        <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant mb-4">
-          Tracked Auctions ({auctions?.data?.total ?? 0})
-        </p>
-        {auctions?.data?.auctions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 gap-2">
-            <CheckCircle className="h-8 w-8 text-emerald-400" />
-            <p className="text-sm text-on-surface-variant">No active liquidation auctions</p>
-          </div>
-        ) : (
-          <div className="text-sm text-on-surface-variant">{auctions?.data?.total ?? 0} active auctions in the liquidator queue</div>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-function EmergencySection() {
+export default function AdminDashboard() {
   const { address } = useAccount();
-  const { sendTransactionAsync } = useSendTransaction();
-  const [pauseReason, setPauseReason] = useState("");
-  const [busy, setBusy] = useState<"pause" | "unpause" | null>(null);
+  const { data: adminCheck, isLoading: adminCheckLoading } = useAdminCheck();
+  const [activeTab, setActiveTab] = useState("overview");
 
-  async function handlePause() {
-    if (!pauseReason) { toast.error("Please provide a reason"); return; }
-    setBusy("pause");
-    try {
-      const res = await adminService.prepareEmergencyPause(pauseReason);
-      const tx = res.data;
-      await sendTransactionAsync({
-        to: tx.target as `0x${string}`,
-        data: tx.tx_data as `0x${string}`,
-        value: BigInt(tx.value ?? 0),
-      });
-      toast.success("Emergency pause initiated");
-      setPauseReason("");
-    } catch (e: any) {
-      toast.error(e.message ?? "Transaction failed");
-    } finally {
-      setBusy(null);
-    }
-  }
+  // Form states
+  const [selectedMarket, setSelectedMarket] = useState("");
+  const [newDeploymentFee, setNewDeploymentFee] = useState("");
+  const [newFeeRecipient, setNewFeeRecipient] = useState("");
+  const [newBorrowerAddress, setNewBorrowerAddress] = useState("");
+  const [removeBorrowerAddress, setRemoveBorrowerAddress] = useState("");
+  const [blacklistAssetAddress, setBlacklistAssetAddress] = useState("");
+  const [removeBlacklistAddress, setRemoveBlacklistAddress] = useState("");
+  const [guardianAddress, setGuardianAddress] = useState("");
+  const [auctionDuration, setAuctionDuration] = useState("");
+  const [minBidIncrement, setMinBidIncrement] = useState("");
+  const [extensionWindow, setExtensionWindow] = useState("");
+  const [stepDuration, setStepDuration] = useState("");
+  const [decrementBps, setDecrementBps] = useState("");
+  const [cancelAuctionId, setCancelAuctionId] = useState("");
+  const [escrowAddress, setEscrowAddress] = useState("");
+  const [minCollateralRatio, setMinCollateralRatio] = useState("");
+  const [liquidationThreshold, setLiquidationThreshold] = useState("");
+  const [oracleAddress, setOracleAddress] = useState("");
+  const [newOraclePrice, setNewOraclePrice] = useState("");
 
-  async function handleUnpause() {
-    if (!pauseReason) { toast.error("Please provide a reason"); return; }
-    setBusy("unpause");
-    try {
-      const res = await adminService.prepareEmergencyUnpause(pauseReason);
-      const tx = res.data;
-      await sendTransactionAsync({
-        to: tx.target as `0x${string}`,
-        data: tx.tx_data as `0x${string}`,
-        value: BigInt(tx.value ?? 0),
-      });
-      toast.success("Protocol unpaused");
-      setPauseReason("");
-    } catch (e: any) {
-      toast.error(e.message ?? "Transaction failed");
-    } finally {
-      setBusy(null);
-    }
-  }
+  // Hooks
+  const { data: markets } = useMarkets({ is_active: true });
+  const { data: deploymentFee } = useDeploymentFee();
+  const { data: feeRecipient } = useFeeRecipient();
+  const marketStatus = useMarketStatus(selectedMarket as `0x${string}`);
+  const auctionParams = useAuctionParams(LIQUIDATOR_ADDRESS);
+  const collateralParams = useCollateralParams(escrowAddress as `0x${string}`);
+  const oracleData = useOraclePrice(oracleAddress as `0x${string}`);
 
-  return (
-    <Card className="p-6 border-red-500/20">
-      <div className="flex items-start gap-3 mb-5">
-        <AlertTriangle className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />
-        <div>
-          <p className="text-sm font-bold text-red-400">Emergency Controls</p>
-          <p className="text-xs text-on-surface-variant mt-0.5">These actions affect all protocol markets. Use only in critical situations. All actions are logged on-chain and in the audit trail.</p>
-        </div>
-      </div>
+  // Mutations
+  const setDeploymentFee = useSetDeploymentFee();
+  const setFeeRecipient = useSetFeeRecipient();
+  const registerBorrower = useRegisterBorrower();
+  const removeBorrower = useRemoveBorrower();
+  const addBlacklist = useAddBlacklist();
+  const removeBlacklist = useRemoveBlacklist();
+  const pauseMarket = usePauseMarket();
+  const unpauseMarket = useUnpauseMarket();
+  const setGuardian = useSetGuardian();
+  const endLiquidation = useEndLiquidation();
+  const setAuctionDurationMutation = useSetAuctionDuration(LIQUIDATOR_ADDRESS);
+  const setMinBidIncrementBpsMutation = useSetMinBidIncrementBps(LIQUIDATOR_ADDRESS);
+  const setAuctionExtensionWindowMutation = useSetAuctionExtensionWindow(LIQUIDATOR_ADDRESS);
+  const setDutchAuctionParamsMutation = useSetDutchAuctionParams(LIQUIDATOR_ADDRESS);
+  const cancelAuction = useCancelAuction(LIQUIDATOR_ADDRESS);
+  const setMinCollateralRatioMutation = useSetMinCollateralRatio();
+  const setLiquidationThresholdMutation = useSetLiquidationThreshold();
+  const setOraclePrice = useSetOraclePrice();
 
-      <div className="space-y-4 max-w-md">
-        <Input
-          label="Reason / Incident Reference"
-          placeholder="e.g. Critical oracle manipulation detected — incident #INX-420"
-          value={pauseReason}
-          onChange={e => setPauseReason(e.target.value)}
-        />
-        <div className="flex gap-3">
-          <Button variant="destructive" onClick={handlePause} loading={busy === "pause"} className="gap-2 flex-1">
-            <Pause className="h-4 w-4" /> Pause Protocol
-          </Button>
-          <Button variant="outline" onClick={handleUnpause} loading={busy === "unpause"} className="gap-2 flex-1">
-            <Play className="h-4 w-4" /> Unpause Protocol
-          </Button>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-// ── Main Page ────────────────────────────────────────────────────────────────
-
-export default function AdminPage() {
-  const { user } = useAuthStore();
-  const { address } = useAccount();
-
-  const { data: adminCheck } = useQuery({
-    queryKey: ["admin", "check", address],
-    queryFn: () => adminService.checkAdmin(address ?? ""),
-    enabled: !!address,
-  });
-
-  const isAdmin = adminCheck?.data?.is_admin ?? user?.role === "admin";
-
-  if (!isAdmin) {
+  if (adminCheckLoading) {
     return (
-      <div className="p-6 flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <Shield className="h-16 w-16 text-on-surface-variant" />
+      <div className="h-screen flex items-center justify-center bg-surface">
         <div className="text-center">
-          <p className="text-lg font-bold text-on-surface">Access Restricted</p>
-          <p className="text-sm text-on-surface-variant mt-1">This area requires administrator privileges. Connect with an admin wallet to proceed.</p>
+          <Skeleton className="h-12 w-12 mx-auto mb-4 rounded-full" />
+          <p className="text-on-surface-variant">Verifying admin access...</p>
         </div>
       </div>
     );
   }
 
+  if (!adminCheck?.is_admin) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-surface">
+        <Card className="p-8 max-w-md text-center">
+          <Shield className="h-16 w-16 mx-auto mb-4 text-red-400" />
+          <h2 className="text-2xl font-bold text-on-surface mb-2">Access Denied</h2>
+          <p className="text-on-surface-variant mb-4">
+            You do not have permission to access the admin dashboard.
+          </p>
+          <p className="text-sm text-on-surface-variant/60 mono">
+            {address ? formatAddress(address) : "Not connected"}
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
+  const selectedMarketData = markets?.markets.find((m) => m.address === selectedMarket);
+
   return (
-    <div className="p-6 space-y-6 max-w-[1400px] mx-auto">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Operator Dashboard</span>
-            <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-xs font-bold text-red-400 border border-red-500/20">ADMIN</span>
-          </div>
-          <h1 className="text-2xl font-semibold text-on-surface">Administration Panel</h1>
-          <p className="text-sm text-on-surface-variant mt-0.5">Full protocol control and monitoring for <span className="mono text-primary">{formatAddress(address ?? "")}</span></p>
-        </div>
-        <Button variant="secondary" size="sm" className="gap-1.5">
-          <RefreshCw className="h-3.5 w-3.5" /> Refresh All
-        </Button>
+    <div className="p-6 space-y-6 max-w-[1400px] mx-auto" data-testid="admin-dashboard">
+      {/* Header */}
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant mb-1">
+          System Administration
+        </p>
+        <h1 className="text-2xl font-semibold text-on-surface">Admin Dashboard</h1>
+        <p className="text-sm text-on-surface-variant mt-0.5">
+          Manage protocol configuration, markets, and system parameters
+        </p>
       </div>
 
-      <Tabs defaultValue="overview">
-        <TabsList className="flex-wrap">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="borrowers">Borrowers</TabsTrigger>
-          <TabsTrigger value="markets">Markets</TabsTrigger>
-          <TabsTrigger value="liquidator">Liquidator</TabsTrigger>
-          <TabsTrigger value="audit">Audit Log</TabsTrigger>
-          <TabsTrigger value="emergency">Emergency</TabsTrigger>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-6">
+          <TabsTrigger value="overview"><BarChart3 className="h-4 w-4 mr-2" />Overview</TabsTrigger>
+          <TabsTrigger value="factory"><Settings className="h-4 w-4 mr-2" />Factory</TabsTrigger>
+          <TabsTrigger value="borrowers"><Users className="h-4 w-4 mr-2" />Borrowers</TabsTrigger>
+          <TabsTrigger value="markets"><Shield className="h-4 w-4 mr-2" />Markets</TabsTrigger>
+          <TabsTrigger value="liquidator"><Gavel className="h-4 w-4 mr-2" />Liquidator</TabsTrigger>
+          <TabsTrigger value="oracle"><DollarSign className="h-4 w-4 mr-2" />Oracle</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview"><OverviewSection /></TabsContent>
-        <TabsContent value="borrowers"><BorrowersSection /></TabsContent>
-        <TabsContent value="markets"><MarketsSection /></TabsContent>
-        <TabsContent value="liquidator"><LiquidatorSection /></TabsContent>
-        <TabsContent value="audit"><AuditSection /></TabsContent>
-        <TabsContent value="emergency"><EmergencySection /></TabsContent>
+        {/* OVERVIEW TAB */}
+        <TabsContent value="overview" className="space-y-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="p-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Total Markets</p>
+              <p className="text-2xl font-bold text-on-surface mt-1">{markets?.count || 0}</p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Deployment Fee</p>
+              <p className="text-2xl font-bold text-on-surface mt-1">
+                {deploymentFee ? formatEther(deploymentFee) : "0"} ETH
+              </p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Factory Address</p>
+              <p className="text-xs font-mono text-on-surface mt-1">{formatAddress(FACTORY_ADDRESS)}</p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Liquidator Address</p>
+              <p className="text-xs font-mono text-on-surface mt-1">{formatAddress(LIQUIDATOR_ADDRESS)}</p>
+            </Card>
+          </div>
+
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-on-surface mb-4">Quick Actions</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <Button onClick={() => setActiveTab("borrowers")} variant="secondary">Manage Borrowers</Button>
+              <Button onClick={() => setActiveTab("markets")} variant="secondary">Manage Markets</Button>
+              <Button onClick={() => setActiveTab("liquidator")} variant="secondary">Configure Liquidator</Button>
+              <Button onClick={() => setActiveTab("oracle")} variant="secondary">Update Oracle Prices</Button>
+            </div>
+          </Card>
+        </TabsContent>
+
+        {/* FACTORY TAB */}
+        <TabsContent value="factory" className="space-y-4">
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-on-surface mb-4">Deployment Fee</h3>
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm text-on-surface-variant mb-1">Current Fee</p>
+                <p className="text-2xl font-bold text-on-surface">
+                  {deploymentFee ? formatEther(deploymentFee) : "0"} ETH
+                </p>
+              </div>
+              <Input
+                label="New Deployment Fee (ETH)"
+                value={newDeploymentFee}
+                onChange={(e) => setNewDeploymentFee(e.target.value)}
+                placeholder="0.01"
+              />
+              <Button
+                onClick={() => {
+                  if (!newDeploymentFee) {
+                    toast.error("Please enter a fee amount");
+                    return;
+                  }
+                  setDeploymentFee.mutate({ feeInEther: newDeploymentFee });
+                }}
+                loading={setDeploymentFee.isPending}
+                disabled={!newDeploymentFee}
+              >
+                Update Deployment Fee
+              </Button>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-on-surface mb-4">Fee Recipient</h3>
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm text-on-surface-variant mb-1">Current Recipient</p>
+                <p className="text-sm font-mono text-on-surface">
+                  {feeRecipient || "Not set"}
+                </p>
+              </div>
+              <Input
+                label="New Fee Recipient Address"
+                value={newFeeRecipient}
+                onChange={(e) => setNewFeeRecipient(e.target.value)}
+                placeholder="0x..."
+              />
+              <Button
+                onClick={() => {
+                  if (!newFeeRecipient) {
+                    toast.error("Please enter a recipient address");
+                    return;
+                  }
+                  setFeeRecipient.mutate({ recipient: newFeeRecipient as `0x${string}` });
+                }}
+                loading={setFeeRecipient.isPending}
+                disabled={!newFeeRecipient}
+              >
+                Update Fee Recipient
+              </Button>
+            </div>
+          </Card>
+        </TabsContent>
+
+        {/* BORROWERS TAB */}
+        <TabsContent value="borrowers" className="space-y-4">
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-on-surface mb-4">Register Borrower</h3>
+            <div className="space-y-3">
+              <Input
+                label="Borrower Address"
+                value={newBorrowerAddress}
+                onChange={(e) => setNewBorrowerAddress(e.target.value)}
+                placeholder="0x..."
+              />
+              <Button
+                onClick={() => {
+                  if (!newBorrowerAddress) {
+                    toast.error("Please enter a borrower address");
+                    return;
+                  }
+                  registerBorrower.mutate({ borrower: newBorrowerAddress as `0x${string}` });
+                  setNewBorrowerAddress("");
+                }}
+                loading={registerBorrower.isPending}
+                disabled={!newBorrowerAddress}
+              >
+                Register Borrower
+              </Button>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-on-surface mb-4">Remove Borrower</h3>
+            <div className="space-y-3">
+              <Input
+                label="Borrower Address"
+                value={removeBorrowerAddress}
+                onChange={(e) => setRemoveBorrowerAddress(e.target.value)}
+                placeholder="0x..."
+              />
+              <Button
+                onClick={() => {
+                  if (!removeBorrowerAddress) {
+                    toast.error("Please enter a borrower address");
+                    return;
+                  }
+                  removeBorrower.mutate({ borrower: removeBorrowerAddress as `0x${string}` });
+                  setRemoveBorrowerAddress("");
+                }}
+                loading={removeBorrower.isPending}
+                disabled={!removeBorrowerAddress}
+                variant="destructive"
+              >
+                Remove Borrower
+              </Button>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-on-surface mb-4">Asset Blacklist</h3>
+            <div className="space-y-4">
+              <div className="space-y-3">
+                <Input
+                  label="Add Asset to Blacklist"
+                  value={blacklistAssetAddress}
+                  onChange={(e) => setBlacklistAssetAddress(e.target.value)}
+                  placeholder="0x... (asset address)"
+                />
+                <Button
+                  onClick={() => {
+                    if (!blacklistAssetAddress) {
+                      toast.error("Please enter an asset address");
+                      return;
+                    }
+                    addBlacklist.mutate({ asset: blacklistAssetAddress as `0x${string}` });
+                    setBlacklistAssetAddress("");
+                  }}
+                  loading={addBlacklist.isPending}
+                  disabled={!blacklistAssetAddress}
+                >
+                  Add to Blacklist
+                </Button>
+              </div>
+
+              <div className="space-y-3">
+                <Input
+                  label="Remove Asset from Blacklist"
+                  value={removeBlacklistAddress}
+                  onChange={(e) => setRemoveBlacklistAddress(e.target.value)}
+                  placeholder="0x... (asset address)"
+                />
+                <Button
+                  onClick={() => {
+                    if (!removeBlacklistAddress) {
+                      toast.error("Please enter an asset address");
+                      return;
+                    }
+                    removeBlacklist.mutate({ asset: removeBlacklistAddress as `0x${string}` });
+                    setRemoveBlacklistAddress("");
+                  }}
+                  loading={removeBlacklist.isPending}
+                  disabled={!removeBlacklistAddress}
+                  variant="secondary"
+                >
+                  Remove from Blacklist
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </TabsContent>
+
+        {/* MARKETS TAB */}
+        <TabsContent value="markets" className="space-y-4">
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-on-surface mb-4">Select Market</h3>
+            <MarketSelector
+              value={selectedMarket}
+              onValueChange={setSelectedMarket}
+              showBadge={false}
+            />
+          </Card>
+
+          {selectedMarket && (
+            <>
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold text-on-surface mb-4">Market Status</h3>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-on-surface-variant">Paused</p>
+                      <p className="text-lg font-semibold text-on-surface">
+                        {marketStatus?.isPaused ? "Yes" : "No"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-on-surface-variant">Liquidating</p>
+                      <p className="text-lg font-semibold text-on-surface">
+                        {marketStatus?.isLiquidating ? "Yes" : "No"}
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm text-on-surface-variant">Guardian</p>
+                    <p className="text-sm font-mono text-on-surface">
+                      {marketStatus?.guardian || "Not set"}
+                    </p>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold text-on-surface mb-4">Market Controls</h3>
+                <div className="space-y-3">
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={() => pauseMarket.mutate({ marketAddress: selectedMarket as `0x${string}` })}
+                      loading={pauseMarket.isPending}
+                      disabled={marketStatus?.isPaused}
+                      variant="destructive"
+                      className="flex-1"
+                    >
+                      Pause Market
+                    </Button>
+                    <Button
+                      onClick={() => unpauseMarket.mutate({ marketAddress: selectedMarket as `0x${string}` })}
+                      loading={unpauseMarket.isPending}
+                      disabled={!marketStatus?.isPaused}
+                      className="flex-1"
+                    >
+                      Unpause Market
+                    </Button>
+                  </div>
+
+                  {marketStatus?.isLiquidating && (
+                    <Button
+                      onClick={() => endLiquidation.mutate({ marketAddress: selectedMarket as `0x${string}` })}
+                      loading={endLiquidation.isPending}
+                      variant="secondary"
+                      className="w-full"
+                    >
+                      End Liquidation
+                    </Button>
+                  )}
+
+                  <div className="space-y-2">
+                    <Input
+                      label="Set Guardian Address"
+                      value={guardianAddress}
+                      onChange={(e) => setGuardianAddress(e.target.value)}
+                      placeholder="0x..."
+                    />
+                    <Button
+                      onClick={() => {
+                        if (!guardianAddress) {
+                          toast.error("Please enter a guardian address");
+                          return;
+                        }
+                        setGuardian.mutate({
+                          marketAddress: selectedMarket as `0x${string}`,
+                          guardianAddress: guardianAddress as `0x${string}`
+                        });
+                        setGuardianAddress("");
+                      }}
+                      loading={setGuardian.isPending}
+                      disabled={!guardianAddress}
+                      className="w-full"
+                    >
+                      Update Guardian
+                    </Button>
+                  </div>
+
+                  {selectedMarketData && (
+                    <div className="mt-4 p-4 bg-surface-container rounded-lg">
+                      <h4 className="text-sm font-semibold text-on-surface mb-2">Escrow Controls</h4>
+                      <Input
+                        label="Escrow Address"
+                        value={escrowAddress}
+                        onChange={(e) => setEscrowAddress(e.target.value)}
+                        placeholder="Get from market contract"
+                        className="mb-3"
+                      />
+                      {escrowAddress && collateralParams && (
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-xs text-on-surface-variant">Min Collateral Ratio</p>
+                              <p className="text-sm font-semibold text-on-surface">
+                                {collateralParams.minCollateralRatio / 100}%
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-on-surface-variant">Liquidation Threshold</p>
+                              <p className="text-sm font-semibold text-on-surface">
+                                {collateralParams.liquidationThreshold / 100}%
+                              </p>
+                            </div>
+                          </div>
+                          <Input
+                            label="New Min Collateral Ratio (bps, e.g. 11000 = 110%)"
+                            value={minCollateralRatio}
+                            onChange={(e) => setMinCollateralRatio(e.target.value)}
+                            placeholder="11000"
+                          />
+                          <Button
+                            onClick={() => {
+                              if (!minCollateralRatio) {
+                                toast.error("Please enter a ratio");
+                                return;
+                              }
+                              setMinCollateralRatioMutation.mutate({
+                                escrowAddress: escrowAddress as `0x${string}`,
+                                ratioBps: parseInt(minCollateralRatio)
+                              });
+                              setMinCollateralRatio("");
+                            }}
+                            loading={setMinCollateralRatioMutation.isPending}
+                            disabled={!minCollateralRatio}
+                            className="w-full"
+                          >
+                            Update Min Collateral Ratio
+                          </Button>
+                          <Input
+                            label="New Liquidation Threshold (bps, e.g. 10500 = 105%)"
+                            value={liquidationThreshold}
+                            onChange={(e) => setLiquidationThreshold(e.target.value)}
+                            placeholder="10500"
+                          />
+                          <Button
+                            onClick={() => {
+                              if (!liquidationThreshold) {
+                                toast.error("Please enter a threshold");
+                                return;
+                              }
+                              setLiquidationThresholdMutation.mutate({
+                                escrowAddress: escrowAddress as `0x${string}`,
+                                thresholdBps: parseInt(liquidationThreshold)
+                              });
+                              setLiquidationThreshold("");
+                            }}
+                            loading={setLiquidationThresholdMutation.isPending}
+                            disabled={!liquidationThreshold}
+                            className="w-full"
+                          >
+                            Update Liquidation Threshold
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </>
+          )}
+        </TabsContent>
+
+        {/* LIQUIDATOR TAB */}
+        <TabsContent value="liquidator" className="space-y-4">
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-on-surface mb-4">Current Parameters</h3>
+            {auctionParams && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-on-surface-variant">Auction Duration</p>
+                  <p className="text-lg font-semibold text-on-surface">
+                    {(auctionParams.auctionDuration / 86400).toFixed(1)} days
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-on-surface-variant">Min Bid Increment</p>
+                  <p className="text-lg font-semibold text-on-surface">
+                    {auctionParams.minBidIncrementBps / 100}%
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-on-surface-variant">Extension Window</p>
+                  <p className="text-lg font-semibold text-on-surface">
+                    {(auctionParams.auctionExtensionWindow / 60).toFixed(0)} minutes
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-on-surface-variant">Dutch Step Duration</p>
+                  <p className="text-lg font-semibold text-on-surface">
+                    {(auctionParams.dutchAuctionStepDuration / 3600).toFixed(0)} hours
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-on-surface-variant">Price Decrement</p>
+                  <p className="text-lg font-semibold text-on-surface">
+                    {auctionParams.dutchAuctionPriceDecrementBps / 100}% per step
+                  </p>
+                </div>
+              </div>
+            )}
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-on-surface mb-4">Update Parameters</h3>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Input
+                  label="Auction Duration (seconds, e.g. 259200 = 3 days)"
+                  value={auctionDuration}
+                  onChange={(e) => setAuctionDuration(e.target.value)}
+                  placeholder="259200"
+                />
+                <Button
+                  onClick={() => {
+                    if (!auctionDuration) {
+                      toast.error("Please enter duration");
+                      return;
+                    }
+                    setAuctionDurationMutation.mutate({ durationSeconds: parseInt(auctionDuration) });
+                    setAuctionDuration("");
+                  }}
+                  loading={setAuctionDurationMutation.isPending}
+                  disabled={!auctionDuration}
+                  className="w-full"
+                >
+                  Update Auction Duration
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                <Input
+                  label="Min Bid Increment (bps, e.g. 100 = 1%)"
+                  value={minBidIncrement}
+                  onChange={(e) => setMinBidIncrement(e.target.value)}
+                  placeholder="100"
+                />
+                <Button
+                  onClick={() => {
+                    if (!minBidIncrement) {
+                      toast.error("Please enter increment");
+                      return;
+                    }
+                    setMinBidIncrementBpsMutation.mutate({ incrementBps: parseInt(minBidIncrement) });
+                    setMinBidIncrement("");
+                  }}
+                  loading={setMinBidIncrementBpsMutation.isPending}
+                  disabled={!minBidIncrement}
+                  className="w-full"
+                >
+                  Update Min Bid Increment
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                <Input
+                  label="Extension Window (seconds, e.g. 900 = 15 min)"
+                  value={extensionWindow}
+                  onChange={(e) => setExtensionWindow(e.target.value)}
+                  placeholder="900"
+                />
+                <Button
+                  onClick={() => {
+                    if (!extensionWindow) {
+                      toast.error("Please enter window");
+                      return;
+                    }
+                    setAuctionExtensionWindowMutation.mutate({ windowSeconds: parseInt(extensionWindow) });
+                    setExtensionWindow("");
+                  }}
+                  loading={setAuctionExtensionWindowMutation.isPending}
+                  disabled={!extensionWindow}
+                  className="w-full"
+                >
+                  Update Extension Window
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                <Input
+                  label="Dutch Step Duration (seconds, e.g. 3600 = 1 hour)"
+                  value={stepDuration}
+                  onChange={(e) => setStepDuration(e.target.value)}
+                  placeholder="3600"
+                />
+                <Input
+                  label="Price Decrement (bps, e.g. 500 = 5%)"
+                  value={decrementBps}
+                  onChange={(e) => setDecrementBps(e.target.value)}
+                  placeholder="500"
+                />
+                <Button
+                  onClick={() => {
+                    if (!stepDuration || !decrementBps) {
+                      toast.error("Please enter both values");
+                      return;
+                    }
+                    setDutchAuctionParamsMutation.mutate({
+                      stepDurationSeconds: parseInt(stepDuration),
+                      decrementBps: parseInt(decrementBps)
+                    });
+                    setStepDuration("");
+                    setDecrementBps("");
+                  }}
+                  loading={setDutchAuctionParamsMutation.isPending}
+                  disabled={!stepDuration || !decrementBps}
+                  className="w-full"
+                >
+                  Update Dutch Auction Params
+                </Button>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-on-surface mb-4">Cancel Auction</h3>
+            <div className="space-y-2">
+              <Input
+                label="Auction ID"
+                value={cancelAuctionId}
+                onChange={(e) => setCancelAuctionId(e.target.value)}
+                placeholder="1"
+              />
+              <Button
+                onClick={() => {
+                  if (!cancelAuctionId) {
+                    toast.error("Please enter auction ID");
+                    return;
+                  }
+                  cancelAuction.mutate({ auctionId: parseInt(cancelAuctionId) });
+                  setCancelAuctionId("");
+                }}
+                loading={cancelAuction.isPending}
+                disabled={!cancelAuctionId}
+                variant="destructive"
+                className="w-full"
+              >
+                Cancel Auction
+              </Button>
+            </div>
+          </Card>
+        </TabsContent>
+
+        {/* ORACLE TAB */}
+        <TabsContent value="oracle" className="space-y-4">
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-on-surface mb-4">Oracle Configuration</h3>
+            <div className="space-y-3">
+              <Input
+                label="Oracle Address"
+                value={oracleAddress}
+                onChange={(e) => setOracleAddress(e.target.value)}
+                placeholder="0x..."
+              />
+              {oracleAddress && oracleData && (
+                <div className="p-4 bg-surface-container rounded-lg space-y-2">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-on-surface-variant">Current Price</p>
+                      <p className="text-xl font-bold text-on-surface">
+                        ${oracleData.price.toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-on-surface-variant">Status</p>
+                      <p className={`text-sm font-semibold ${oracleData.isStale ? "text-red-400" : "text-emerald-400"}`}>
+                        {oracleData.isStale ? "Stale" : "Fresh"}
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs text-on-surface-variant">Last Updated</p>
+                    <p className="text-xs text-on-surface">
+                      {new Date(oracleData.updatedAt * 1000).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-on-surface mb-4">Update Price</h3>
+            <div className="space-y-3">
+              <Input
+                label="New Price (USD, e.g. 2000 for $2000)"
+                value={newOraclePrice}
+                onChange={(e) => setNewOraclePrice(e.target.value)}
+                placeholder="2000"
+              />
+              <Button
+                onClick={() => {
+                  if (!oracleAddress || !newOraclePrice) {
+                    toast.error("Please enter oracle address and price");
+                    return;
+                  }
+                  setOraclePrice.mutate({
+                    oracleAddress: oracleAddress as `0x${string}`,
+                    price: newOraclePrice
+                  });
+                  setNewOraclePrice("");
+                }}
+                loading={setOraclePrice.isPending}
+                disabled={!oracleAddress || !newOraclePrice}
+                className="w-full"
+              >
+                Update Oracle Price
+              </Button>
+              <p className="text-xs text-on-surface-variant">
+                ⚠️ This only works with MockOracle contracts. Production oracles cannot be updated manually.
+              </p>
+            </div>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   );

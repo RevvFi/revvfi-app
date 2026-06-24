@@ -21,7 +21,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-2xl">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-2xl mx-auto">
       <div>
         <h1 className="text-2xl font-semibold text-on-surface">Settings</h1>
         <p className="text-sm text-on-surface-variant mt-0.5">Manage your account and preferences</p>
@@ -30,12 +30,12 @@ export default function SettingsPage() {
       {/* Account */}
       <Card className="p-5 space-y-4">
         <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Account</p>
-        <div className="flex items-center gap-3">
-          <div className="h-12 w-12 rounded-full bg-primary-container/15 flex items-center justify-center">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="h-12 w-12 rounded-full bg-primary-container/15 flex items-center justify-center shrink-0">
             <Wallet className="h-6 w-6 text-primary" />
           </div>
-          <div>
-            <p className="text-sm font-medium text-on-surface mono">{address ?? "Not connected"}</p>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-on-surface mono truncate">{address ?? "Not connected"}</p>
             <p className="text-xs text-on-surface-variant capitalize">{user?.role ?? "Guest"}</p>
           </div>
           {isAuthenticated && (

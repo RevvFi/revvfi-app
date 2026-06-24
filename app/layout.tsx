@@ -13,13 +13,19 @@ export const metadata: Metadata = {
   title: "RevvFi | Institutional DeFi",
   description: "Fixed-rate institutional lending protocol with isolated markets and on-chain reputation.",
   icons: {
-    icon: "/favicon.ico",
-    apple: "/apple-touch-icon.png",
+    icon: [
+      { url: "/favicon.ico", sizes: "48x48 32x32" },
+      { url: "/favicon-96x96.png", sizes: "96x96", type: "image/png" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+    apple: { url: "/apple-touch-icon.png", sizes: "180x180" },
   },
+  manifest: "/site.webmanifest",
   openGraph: {
     title: "RevvFi | Institutional DeFi",
     description: "Fixed-rate institutional lending protocol",
     type: "website",
+    images: [{ url: "/web-app-manifest-512x512.png" }],
   },
 };
 

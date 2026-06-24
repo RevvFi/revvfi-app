@@ -9,7 +9,7 @@ export function Card({
   return (
     <div
       className={cn(
-        "rounded-lg border border-white/[0.06] bg-surface-container",
+        "rounded-md border border-outline-variant bg-surface-container",
         glass && "backdrop-blur-xl bg-surface-container/60",
         className
       )}
@@ -26,10 +26,7 @@ export function CardHeader({
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div
-      className={cn("flex flex-col gap-1 p-5 pb-0", className)}
-      {...props}
-    >
+    <div className={cn("flex flex-col gap-1 p-4 pb-0", className)} {...props}>
       {children}
     </div>
   );
@@ -42,7 +39,7 @@ export function CardTitle({
 }: React.HTMLAttributes<HTMLHeadingElement>) {
   return (
     <h3
-      className={cn("text-sm font-semibold uppercase tracking-widest text-on-surface-variant", className)}
+      className={cn("text-xs font-semibold uppercase tracking-widest text-on-surface-variant", className)}
       {...props}
     >
       {children}
@@ -56,7 +53,7 @@ export function CardContent({
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn("p-5", className)} {...props}>
+    <div className={cn("p-4", className)} {...props}>
       {children}
     </div>
   );
@@ -68,10 +65,7 @@ export function CardFooter({
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div
-      className={cn("flex items-center p-5 pt-0", className)}
-      {...props}
-    >
+    <div className={cn("flex items-center p-4 pt-0", className)} {...props}>
       {children}
     </div>
   );
@@ -91,20 +85,15 @@ export function MetricCard({
   className?: string;
 }) {
   return (
-    <Card className={cn("p-5", className)}>
-      <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant mb-2">
+    <Card className={cn("p-4", className)}>
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">
         {label}
       </p>
-      <p className="text-2xl font-semibold text-on-surface mono">{value}</p>
+      <p className="text-xl font-semibold text-on-surface mono">{value}</p>
       {(sub || trend) && (
         <div className="mt-1.5 flex items-center gap-2">
           {trend && (
-            <span
-              className={cn(
-                "text-xs font-medium",
-                trend.positive ? "text-emerald-400" : "text-red-400"
-              )}
-            >
+            <span className={cn("text-xs font-medium", trend.positive ? "text-emerald-400" : "text-red-400")}>
               {trend.positive ? "↑" : "↓"} {trend.value}
             </span>
           )}

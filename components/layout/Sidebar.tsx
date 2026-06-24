@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store/ui.store";
@@ -13,12 +14,12 @@ import {
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/markets", label: "Markets", icon: TrendingUp },
-  { href: "/borrow", label: "Borrow", icon: ArrowDownLeft },
-  { href: "/lend", label: "Lend", icon: ArrowUpRight },
+  { href: "/markets",   label: "Markets",   icon: TrendingUp },
+  { href: "/borrow",    label: "Borrow",    icon: ArrowDownLeft },
+  { href: "/lend",      label: "Lend",      icon: ArrowUpRight },
   { href: "/portfolio", label: "Portfolio", icon: Briefcase },
-  { href: "/auctions", label: "Auctions", icon: Gavel },
-  { href: "/reputation", label: "Reputation", icon: Award },
+  { href: "/auctions",  label: "Auctions",  icon: Gavel },
+  { href: "/reputation",label: "Reputation",icon: Award },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
 ];
 
@@ -31,25 +32,35 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "flex h-screen flex-col border-r border-outline-variant/20 bg-surface-container-lowest transition-all duration-200",
-        sidebarCollapsed ? "w-16" : "w-56"
+        "flex h-screen flex-col border-r border-[#1a1a1a] bg-[#080808] transition-all duration-200",
+        sidebarCollapsed ? "w-14" : "w-52"
       )}
     >
       {/* Logo */}
-      <div className="flex h-14 items-center gap-2.5 border-b border-outline-variant/20 px-4">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary-container">
-          <span className="text-xs font-black text-white">R</span>
+      <div className={cn(
+        "flex h-14 items-center border-b border-[#1a1a1a]",
+        sidebarCollapsed ? "justify-center px-0" : "gap-2.5 px-4"
+      )}>
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center">
+          <Image
+            src="/favicon-96x96.png"
+            alt="RevvFi"
+            width={28}
+            height={28}
+            className="rounded-sm"
+            priority
+          />
         </div>
         {!sidebarCollapsed && (
           <div className="min-w-0">
-            <p className="text-sm font-bold text-on-surface truncate">RevvFi</p>
-            <p className="text-[10px] uppercase tracking-widest text-on-surface-variant truncate">Institutional</p>
+            <p className="text-sm font-bold text-[#e2e2e2] tracking-tight truncate">RevvFi</p>
+            <p className="text-[9px] uppercase tracking-[0.18em] text-[#555] truncate">Institutional</p>
           </div>
         )}
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-3 space-y-0.5 px-2">
+      <nav className="flex-1 overflow-y-auto py-2 space-y-0.5 px-2">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (
@@ -58,13 +69,13 @@ export function Sidebar() {
               href={href}
               title={sidebarCollapsed ? label : undefined}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-3 rounded-md px-2.5 py-2 text-xs font-medium transition-colors",
                 active
-                  ? "bg-primary-container/15 text-primary"
-                  : "text-on-surface-variant hover:bg-white/5 hover:text-on-surface"
+                  ? "bg-[#f15a24]/10 text-[#f15a24]"
+                  : "text-[#666] hover:bg-white/[0.04] hover:text-[#c8c8c8]"
               )}
             >
-              <Icon className={cn("h-4 w-4 shrink-0", active && "text-primary")} />
+              <Icon className={cn("h-4 w-4 shrink-0", active ? "text-[#f15a24]" : "text-current")} />
               {!sidebarCollapsed && <span className="truncate">{label}</span>}
             </Link>
           );
@@ -74,7 +85,7 @@ export function Sidebar() {
         {isAdmin && (
           <>
             {!sidebarCollapsed && (
-              <p className="px-2.5 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant/50">
+              <p className="px-2.5 pt-4 pb-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-[#444]">
                 Admin
               </p>
             )}
@@ -82,10 +93,10 @@ export function Sidebar() {
               href="/admin"
               title={sidebarCollapsed ? "Admin" : undefined}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-3 rounded-md px-2.5 py-2 text-xs font-medium transition-colors",
                 pathname.startsWith("/admin")
-                  ? "bg-primary-container/15 text-primary"
-                  : "text-on-surface-variant hover:bg-white/5 hover:text-on-surface"
+                  ? "bg-[#f15a24]/10 text-[#f15a24]"
+                  : "text-[#666] hover:bg-white/[0.04] hover:text-[#c8c8c8]"
               )}
             >
               <ShieldCheck className="h-4 w-4 shrink-0" />
@@ -94,9 +105,9 @@ export function Sidebar() {
           </>
         )}
 
-        {/* Settings */}
+        {/* System section */}
         {!sidebarCollapsed && (
-          <p className="px-2.5 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant/50">
+          <p className="px-2.5 pt-4 pb-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-[#444]">
             System
           </p>
         )}
@@ -104,10 +115,10 @@ export function Sidebar() {
           href="/settings"
           title={sidebarCollapsed ? "Settings" : undefined}
           className={cn(
-            "flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
+            "flex items-center gap-3 rounded-md px-2.5 py-2 text-xs font-medium transition-colors",
             pathname === "/settings"
-              ? "bg-primary-container/15 text-primary"
-              : "text-on-surface-variant hover:bg-white/5 hover:text-on-surface"
+              ? "bg-[#f15a24]/10 text-[#f15a24]"
+              : "text-[#666] hover:bg-white/[0.04] hover:text-[#c8c8c8]"
           )}
         >
           <Settings className="h-4 w-4 shrink-0" />
@@ -117,12 +128,12 @@ export function Sidebar() {
 
       {/* Create Market CTA */}
       {!sidebarCollapsed && (
-        <div className="p-3 border-t border-outline-variant/20">
+        <div className="p-3 border-t border-[#1a1a1a]">
           <Link
             href="/markets/create"
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary-container px-3 py-2.5 text-sm font-semibold text-white hover:bg-primary-container/90 transition-colors"
+            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-[#f15a24] px-3 py-2 text-xs font-semibold text-white hover:bg-[#d94e1f] transition-colors"
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="h-3.5 w-3.5" />
             Create Market
           </Link>
         </div>
@@ -131,11 +142,11 @@ export function Sidebar() {
       {/* Collapse toggle */}
       <button
         onClick={toggleSidebar}
-        className="flex h-10 items-center justify-center border-t border-outline-variant/20 text-on-surface-variant hover:text-on-surface hover:bg-white/5 transition-colors"
+        className="flex h-10 items-center justify-center border-t border-[#1a1a1a] text-[#444] hover:text-[#888] hover:bg-white/[0.03] transition-colors"
       >
         {sidebarCollapsed
-          ? <ChevronRight className="h-4 w-4" />
-          : <ChevronLeft className="h-4 w-4" />}
+          ? <ChevronRight className="h-3.5 w-3.5" />
+          : <ChevronLeft className="h-3.5 w-3.5" />}
       </button>
     </aside>
   );

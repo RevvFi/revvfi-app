@@ -1,11 +1,15 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useWriteContract, usePublicClient } from "wagmi";
+import { readContract } from "@wagmi/core";
+import { parseUnits, type Address } from "viem";
 import { toast } from "sonner";
 import { positionService, type PositionsParams } from "@/services/position.service";
 import { withdrawalService } from "@/services/withdrawal.service";
 import { queryKeys } from "@/constants/query-keys";
-import type { WithdrawalRequest } from "@/types";
+import { MARKET_ABI, LIQUIDITY_QUEUE_ABI } from "@/lib/contracts/abis";
+import { wagmiConfig } from "@/providers/wagmi-config";
 import { useAuthStore } from "@/store/auth.store";
 
 export function usePositions(params?: PositionsParams) {
@@ -38,12 +42,32 @@ export function usePortfolio() {
 
 export function useClaimPosition() {
   const qc = useQueryClient();
+  const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient();
+
   return useMutation({
-    mutationFn: (tokenId: number) => positionService.claimPosition({ token_id: tokenId }),
+    mutationFn: async ({ tokenId, marketAddress }: { tokenId: number; marketAddress: string }) => {
+      // Call Market.claimFunds(positionId) on-chain
+      const txHash = await writeContractAsync({
+        address: marketAddress as `0x${string}`,
+        abi: MARKET_ABI,
+        functionName: "claimFunds",
+        args: [BigInt(tokenId)],
+      });
+      await publicClient!.waitForTransactionReceipt({ hash: txHash });
+
+      // Sync backend
+      try {
+        await positionService.claimPosition({ token_id: tokenId });
+      } catch {
+        // non-fatal
+      }
+      return txHash;
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.positions.all() });
       qc.invalidateQueries({ queryKey: queryKeys.positions.portfolio });
-      toast.success("Position claimed successfully");
+      toast.success("Funds claimed successfully");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -58,27 +82,133 @@ export function useWithdrawals() {
   });
 }
 
+export interface CreateWithdrawalParams {
+  marketAddress: string;
+  positionId: number;
+  amount: string;
+  borrowAssetDecimals: number;
+}
+
 export function useCreateWithdrawal() {
   const qc = useQueryClient();
+  const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient();
+
   return useMutation({
-    mutationFn: (payload: WithdrawalRequest) => withdrawalService.createWithdrawal(payload),
+    mutationFn: async ({
+      marketAddress,
+      positionId,
+      amount,
+      borrowAssetDecimals,
+    }: CreateWithdrawalParams) => {
+      const amountWei = parseUnits(amount, borrowAssetDecimals);
+
+      // Step 1: Read LiquidityQueue address from Market
+      toast.info("Getting LiquidityQueue address…");
+      const liquidityQueueAddr = (await readContract(wagmiConfig, {
+        address: marketAddress as Address,
+        abi: MARKET_ABI,
+        functionName: "liquidityQueue",
+      })) as Address;
+
+      // Step 2: Call LiquidityQueue.requestWithdrawal()
+      toast.info("Submitting withdrawal request on-chain…");
+      const txHash = await writeContractAsync({
+        address: liquidityQueueAddr,
+        abi: LIQUIDITY_QUEUE_ABI,
+        functionName: "requestWithdrawal",
+        args: [BigInt(positionId), amountWei],
+      });
+
+      await publicClient!.waitForTransactionReceipt({ hash: txHash });
+
+      // Step 3: Backend sync (best-effort)
+      try {
+        await withdrawalService.createWithdrawal({
+          position_id: positionId,
+          amount: amount,
+        });
+      } catch {
+        // non-fatal: indexer will sync from WithdrawalRequested event
+      }
+
+      return txHash;
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.withdrawals.all() });
-      toast.success("Withdrawal request submitted");
+      toast.success("Withdrawal request submitted successfully");
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      console.error("Create withdrawal failed:", e);
+      if (e.message?.includes("User rejected")) {
+        toast.error("Transaction rejected by user");
+      } else if (e.message?.includes("PositionLocked")) {
+        toast.error("Position is already locked for withdrawal");
+      } else if (e.message?.includes("AmountExceedsBalance")) {
+        toast.error("Withdrawal amount exceeds position balance");
+      } else {
+        toast.error(e.message || "Failed to create withdrawal request");
+      }
+    },
   });
+}
+
+export interface CancelWithdrawalParams {
+  marketAddress: string;
+  requestId: number;
 }
 
 export function useCancelWithdrawal() {
   const qc = useQueryClient();
+  const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient();
+
   return useMutation({
-    mutationFn: (requestId: number) => withdrawalService.cancelWithdrawal({ request_id: requestId }),
+    mutationFn: async ({ marketAddress, requestId }: CancelWithdrawalParams) => {
+      // Step 1: Read LiquidityQueue address from Market
+      toast.info("Getting LiquidityQueue address…");
+      const liquidityQueueAddr = (await readContract(wagmiConfig, {
+        address: marketAddress as Address,
+        abi: MARKET_ABI,
+        functionName: "liquidityQueue",
+      })) as Address;
+
+      // Step 2: Call LiquidityQueue.cancelWithdrawal()
+      toast.info("Cancelling withdrawal on-chain…");
+      const txHash = await writeContractAsync({
+        address: liquidityQueueAddr,
+        abi: LIQUIDITY_QUEUE_ABI,
+        functionName: "cancelWithdrawal",
+        args: [BigInt(requestId)],
+      });
+
+      await publicClient!.waitForTransactionReceipt({ hash: txHash });
+
+      // Step 3: Backend sync (best-effort)
+      try {
+        await withdrawalService.cancelWithdrawal({ request_id: requestId });
+      } catch {
+        // non-fatal: indexer will sync
+      }
+
+      return txHash;
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.withdrawals.all() });
-      toast.success("Withdrawal cancelled");
+      toast.success("Withdrawal cancelled successfully");
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      console.error("Cancel withdrawal failed:", e);
+      if (e.message?.includes("User rejected")) {
+        toast.error("Transaction rejected by user");
+      } else if (e.message?.includes("WithdrawalNotFound")) {
+        toast.error("Withdrawal request not found");
+      } else if (e.message?.includes("AlreadyProcessed")) {
+        toast.error("Cannot cancel - withdrawal already processed");
+      } else {
+        toast.error(e.message || "Failed to cancel withdrawal");
+      }
+    },
   });
 }
 

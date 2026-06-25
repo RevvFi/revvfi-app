@@ -1,10 +1,13 @@
 "use client";
 
-import { use } from "react";
+import { use, useMemo } from "react";
 import Link from "next/link";
+import { useAccount } from "wagmi";
 import { useMarket, useMarketMetrics } from "@/hooks/useMarkets";
 import { useBorrower, useBorrowerRisk } from "@/hooks/useBorrower";
 import { useOffers } from "@/hooks/useOffers";
+import { usePositions } from "@/hooks/usePositions";
+import { MarketParticipants } from "@/components/MarketParticipants";
 import { Card } from "@/components/ui/card";
 import { StatusBadge, RiskBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,11 +32,22 @@ const MOCK_APR = [
 
 export default function MarketDetailPage({ params }: { params: Promise<{ address: string }> }) {
   const { address } = use(params);
+  const { address: userAddress } = useAccount();
   const { data: market, isLoading } = useMarket(address);
   const { data: metrics } = useMarketMetrics(address);
   const { data: borrower } = useBorrower(market?.borrower ?? "");
   const { data: risk } = useBorrowerRisk(market?.borrower ?? "");
   const { data: offers } = useOffers({ market_address: address });
+  const { data: positionsData } = usePositions({ market_address: address });
+
+  const userRole = useMemo(() => {
+    if (!userAddress || !market) return 'visitor' as const;
+    if (market.borrower.toLowerCase() === userAddress.toLowerCase()) return 'borrower' as const;
+    if (positionsData?.positions.some(p =>
+      p.market_address.toLowerCase() === address.toLowerCase()
+    )) return 'lender' as const;
+    return 'visitor' as const;
+  }, [userAddress, market, positionsData, address]);
 
   if (isLoading) {
     return (
@@ -65,12 +79,22 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
           <Link href="/markets" className="flex items-center gap-1.5 text-xs text-on-surface-variant hover:text-on-surface mb-2">
             <ArrowLeft className="h-3.5 w-3.5" /> Markets
           </Link>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-semibold text-on-surface">
               {market.borrow_asset.symbol || "USDC"} / {market.collateral_asset.symbol || "ETH"} Market Details
             </h1>
             <StatusBadge status={market.is_active ? "active" : "inactive"} />
             {market.is_liquidating && <StatusBadge status="liquidating" />}
+            {userRole === 'borrower' && (
+              <span className="inline-flex items-center h-6 px-2.5 rounded-md text-xs font-semibold bg-blue-500/15 text-blue-400 border border-blue-500/25">
+                You: Borrower
+              </span>
+            )}
+            {userRole === 'lender' && (
+              <span className="inline-flex items-center h-6 px-2.5 rounded-md text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
+                You: Lender
+              </span>
+            )}
           </div>
           <p className="text-xs text-on-surface-variant mono mt-1">{address}</p>
         </div>
@@ -78,11 +102,19 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
           <Button variant="secondary" size="sm" className="gap-1.5">
             <Share2 className="h-3.5 w-3.5" /> Share Market
           </Button>
-          <Link href="/lend">
-            <Button className="gap-1.5">
-              <Plus className="h-3.5 w-3.5" /> Supply Liquidity
-            </Button>
-          </Link>
+          {userRole === 'borrower' ? (
+            <Link href="/borrow">
+              <Button className="gap-1.5">
+                Go to Borrow Portal
+              </Button>
+            </Link>
+          ) : (
+            <Link href="/lend">
+              <Button className="gap-1.5">
+                <Plus className="h-3.5 w-3.5" /> Supply Liquidity
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -240,6 +272,7 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
           <div className="px-5 pt-3">
             <TabsList>
               <TabsTrigger value="offers">Offers ({offers?.count ?? 0})</TabsTrigger>
+              <TabsTrigger value="participants">Participants</TabsTrigger>
               <TabsTrigger value="activity">Market Activity</TabsTrigger>
             </TabsList>
           </div>
@@ -270,13 +303,25 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
                 ) : (
                   <TableRow>
                     <TableCell colSpan={6}>
-                      <EmptyState title="No offers yet" description="Be the first to supply liquidity to this market" action={<Link href="/lend"><Button size="sm">Create Offer</Button></Link>} />
+                      <EmptyState
+                    title="No offers yet"
+                    description={userRole === 'borrower'
+                      ? "No lenders have submitted offers for your market yet. Share your market to attract lenders."
+                      : "Be the first to supply liquidity to this market"}
+                    action={userRole === 'borrower'
+                      ? <Link href="/borrow"><Button size="sm">View Borrow Portal</Button></Link>
+                      : <Link href="/lend"><Button size="sm">Create Offer</Button></Link>}
+                  />
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
           </TabsContent>
+          <TabsContent value="participants" className="mt-0 p-5">
+            <MarketParticipants marketAddress={address} />
+          </TabsContent>
+
           <TabsContent value="activity" className="mt-0">
             <Table>
               <TableHeader>

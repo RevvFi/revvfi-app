@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useAccount } from "wagmi";
 import { useMarkets } from "@/hooks/useMarkets";
 import { formatAPR } from "@/lib/utils";
 import { Search, SlidersHorizontal, RefreshCw, Plus } from "lucide-react";
@@ -146,6 +147,7 @@ type RowType = "Loan" | "Collateral";
 interface MarketRow {
   key: string;
   asset: Asset;
+  secondaryAsset?: Asset;
   type: RowType;
   market: Market;
 }
@@ -153,11 +155,16 @@ interface MarketRow {
 function buildRows(markets: Market[], filter: string): MarketRow[] {
   const rows: MarketRow[] = [];
   for (const m of markets) {
-    if (filter !== "Collateral") {
-      rows.push({ key: `${m.address}-loan`, asset: m.borrow_asset,     type: "Loan",       market: m });
-    }
-    if (filter !== "Loan") {
-      rows.push({ key: `${m.address}-col`,  asset: m.collateral_asset, type: "Collateral", market: m });
+    if (filter === "All" || filter === "Advanced") {
+      // Show one combined row per market — no duplicates
+      rows.push({ key: `${m.address}-market`, asset: m.borrow_asset, secondaryAsset: m.collateral_asset, type: "Loan", market: m });
+    } else {
+      if (filter !== "Collateral") {
+        rows.push({ key: `${m.address}-loan`, asset: m.borrow_asset,     type: "Loan",       market: m });
+      }
+      if (filter !== "Loan") {
+        rows.push({ key: `${m.address}-col`,  asset: m.collateral_asset, type: "Collateral", market: m });
+      }
     }
   }
   return rows;
@@ -194,11 +201,14 @@ function TH({ children, right }: { children: React.ReactNode; right?: boolean })
 // ── Page ──────────────────────────────────────────────────────────────────
 
 type TypeFilter = "All" | "Loan" | "Collateral" | "Advanced";
+type ViewMode   = "All" | "My";
 
 export default function MarketsPage() {
   const router = useRouter();
+  const { address } = useAccount();
   const [search, setSearch]         = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("All");
+  const [viewMode, setViewMode]     = useState<ViewMode>("All");
   const [activeFilter]              = useState<boolean | undefined>(undefined);
 
   // ← data query: untouched
@@ -207,8 +217,11 @@ export default function MarketsPage() {
     limit: 50,
   });
 
-  // Search filter — no changes to query params
+  // Search + view-mode filter — purely client-side, no query changes
   const markets = (data?.markets ?? []).filter((m) => {
+    if (viewMode === "My" && address) {
+      if (m.borrower.toLowerCase() !== address.toLowerCase()) return false;
+    }
     if (!search) return true;
     const q = search.toLowerCase();
     return (
@@ -242,7 +255,29 @@ export default function MarketsPage() {
       </div>
 
       {/* ── Filter bar ─────────────────────────────────────────────────── */}
-      <div className="flex items-center border-b border-[#1A1A1A] px-4 sm:px-6">
+      <div className="flex items-center border-b border-[#1A1A1A] px-4 sm:px-6 overflow-x-auto">
+        {/* All / My toggle — only shown when wallet is connected */}
+        {address && (
+          <>
+            <div className="flex items-center h-11 gap-0.5 mr-3 shrink-0">
+              {(["All", "My"] as ViewMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setViewMode(mode)}
+                  className={`h-7 px-3 rounded text-[12px] font-medium transition-colors whitespace-nowrap ${
+                    viewMode === mode
+                      ? "bg-[#FF6A00]/15 text-[#FF6A00]"
+                      : "text-[#9CA3AF] hover:text-[#E6E6E6]"
+                  }`}
+                >
+                  {mode === "My" ? "My Markets" : "All Markets"}
+                </button>
+              ))}
+            </div>
+            <div className="h-5 w-px bg-[#1A1A1A] mr-3 shrink-0" />
+          </>
+        )}
+
         {/* Type tabs */}
         <div className="flex items-center h-11 overflow-x-auto">
           {(["All", "Loan", "Collateral", "Advanced"] as TypeFilter[]).map((t) => (
@@ -261,7 +296,7 @@ export default function MarketsPage() {
         </div>
 
         {/* Right controls */}
-        <div className="ml-auto flex items-center gap-2 pl-4">
+        <div className="ml-auto flex items-center gap-2 pl-4 shrink-0">
           {/* Search */}
           <div className="relative hidden sm:block">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#9CA3AF] pointer-events-none" />
@@ -335,6 +370,7 @@ export default function MarketsPage() {
                 const m = row.market;
                 const dec = row.asset.decimals || 6;
                 const isLoan = row.type === "Loan";
+                const isCombined = !!row.secondaryAsset;
 
                 return (
                   <tr
@@ -344,30 +380,69 @@ export default function MarketsPage() {
                   >
                     {/* Asset */}
                     <td className="px-4 sm:px-6 py-3.5">
-                      <div className="flex items-center gap-3">
-                        <TokenIcon symbol={row.asset.symbol} size={32} />
-                        <div className="min-w-0">
-                          <p className="font-semibold text-[#E6E6E6] leading-none">
-                            {row.asset.symbol || "—"}
-                          </p>
-                          <p className="text-[10px] text-[#9CA3AF] mt-0.5 font-mono truncate">
-                            {m.address.slice(0, 6)}…{m.address.slice(-4)}
-                          </p>
+                      {isCombined ? (
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-1 shrink-0">
+                            <TokenIcon symbol={row.asset.symbol} size={26} />
+                            <span className="text-[#9CA3AF] text-xs mx-0.5">→</span>
+                            <TokenIcon symbol={row.secondaryAsset!.symbol} size={26} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-[#E6E6E6] leading-none">
+                              {row.asset.symbol} → {row.secondaryAsset!.symbol}
+                            </p>
+                            <p className="text-[10px] text-[#9CA3AF] mt-0.5 font-mono truncate">
+                              {m.address.slice(0, 6)}…{m.address.slice(-4)}
+                            </p>
+                            {address && m.borrower.toLowerCase() === address.toLowerCase() && (
+                              <span className="inline-flex items-center h-4 px-1.5 mt-1 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-400">
+                                You: Borrower
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          <TokenIcon symbol={row.asset.symbol} size={32} />
+                          <div className="min-w-0">
+                            <p className="font-semibold text-[#E6E6E6] leading-none">
+                              {row.asset.symbol || "—"}
+                            </p>
+                            <p className="text-[10px] text-[#9CA3AF] mt-0.5 font-mono truncate">
+                              {m.address.slice(0, 6)}…{m.address.slice(-4)}
+                            </p>
+                            {address && isLoan && m.borrower.toLowerCase() === address.toLowerCase() && (
+                              <span className="inline-flex items-center h-4 px-1.5 mt-1 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-400">
+                                You: Borrower
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </td>
 
                     {/* Type */}
                     <td className="px-4 py-3.5">
-                      <span
-                        className={`inline-flex items-center h-5 px-2 rounded text-[11px] font-semibold ${
-                          isLoan
-                            ? "bg-[#FF6A00]/10 text-[#FF6A00]"
-                            : "bg-blue-500/10 text-blue-400"
-                        }`}
-                      >
-                        {row.type}
-                      </span>
+                      {isCombined ? (
+                        <div className="space-y-0.5">
+                          <p className="text-[11px] text-[#9CA3AF]">
+                            Borrow: <span className="text-[#E6E6E6]">{row.asset.symbol}</span>
+                          </p>
+                          <p className="text-[11px] text-[#9CA3AF]">
+                            Collateral: <span className="text-[#E6E6E6]">{row.secondaryAsset!.symbol}</span>
+                          </p>
+                        </div>
+                      ) : (
+                        <span
+                          className={`inline-flex items-center h-5 px-2 rounded text-[11px] font-semibold ${
+                            isLoan
+                              ? "bg-[#FF6A00]/10 text-[#FF6A00]"
+                              : "bg-blue-500/10 text-blue-400"
+                          }`}
+                        >
+                          {row.type}
+                        </span>
+                      )}
                     </td>
 
                     {/* Network */}
@@ -410,8 +485,8 @@ export default function MarketsPage() {
                     {/* Actions */}
                     <td className="px-4 sm:px-6 py-3.5 text-right">
                       <ActionBtn
-                        href={isLoan ? "/borrow" : "/lend"}
-                        label={isLoan ? "Borrow" : "Supply"}
+                        href={isCombined ? `/markets/${m.address}` : isLoan ? "/borrow" : "/lend"}
+                        label={isCombined ? "View" : isLoan ? "Borrow" : "Supply"}
                       />
                     </td>
                   </tr>
@@ -425,8 +500,8 @@ export default function MarketsPage() {
       {/* ── Footer ─────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-6 py-2.5 border-t border-[#1A1A1A] text-[11px] text-[#9CA3AF]">
         <span>
-          {rows.length} asset{rows.length !== 1 ? "s" : ""} ·{" "}
-          {data?.count ?? 0} market{(data?.count ?? 0) !== 1 ? "s" : ""}
+          {rows.length} {(typeFilter === "All" || typeFilter === "Advanced") ? "market" : "asset"}{rows.length !== 1 ? "s" : ""} ·{" "}
+          {data?.count ?? 0} total market{(data?.count ?? 0) !== 1 ? "s" : ""}
         </span>
         <div className="flex items-center gap-1.5">
           <span className="h-1.5 w-1.5 rounded-full bg-[#22C55E] pulse-dot" />

@@ -220,3 +220,156 @@ export function useWithdrawalEpoch() {
     enabled: isAuthenticated,
   });
 }
+
+export interface ClaimWithdrawalParams {
+  marketAddress: string;
+  requestId: number;
+}
+
+export interface ProcessEpochParams {
+  marketAddress: string;
+  epochNumber: number;
+  availableLiquidity: string;
+  borrowAssetDecimals: number;
+}
+
+/**
+ * Process a withdrawal epoch (Admin/Factory only)
+ * Calculates pro-rata fulfillment for all withdrawal requests in the epoch
+ */
+export function useProcessEpoch() {
+  const qc = useQueryClient();
+  const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient();
+
+  return useMutation({
+    mutationFn: async ({
+      marketAddress,
+      epochNumber,
+      availableLiquidity,
+      borrowAssetDecimals,
+    }: ProcessEpochParams) => {
+      const liquidityWei = parseUnits(availableLiquidity, borrowAssetDecimals);
+
+      // Step 1: Read LiquidityQueue address from Market
+      toast.info("Getting LiquidityQueue address…");
+      const liquidityQueueAddr = (await readContract(wagmiConfig, {
+        address: marketAddress as Address,
+        abi: MARKET_ABI,
+        functionName: "liquidityQueue",
+      })) as Address;
+
+      // Step 2: Call LiquidityQueue.processEpoch()
+      toast.info(`Processing epoch ${epochNumber}...`);
+      const txHash = await writeContractAsync({
+        address: liquidityQueueAddr,
+        abi: LIQUIDITY_QUEUE_ABI,
+        functionName: "processEpoch",
+        args: [BigInt(epochNumber), liquidityWei],
+      });
+
+      await publicClient!.waitForTransactionReceipt({ hash: txHash });
+      return txHash;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.withdrawals.all() });
+      qc.invalidateQueries({ queryKey: queryKeys.withdrawals.epoch });
+      toast.success("Epoch processed successfully");
+    },
+    onError: (e: Error) => {
+      console.error("Process epoch failed:", e);
+      if (e.message?.includes("User rejected")) {
+        toast.error("Transaction rejected by user");
+      } else if (e.message?.includes("UnauthorizedCaller")) {
+        toast.error("Only factory owner can process epochs");
+      } else if (e.message?.includes("EpochNotComplete")) {
+        toast.error("Epoch already processed");
+      } else if (e.message?.includes("WithdrawalTooEarly")) {
+        toast.error("Epoch has not ended yet");
+      } else {
+        toast.error(e.message || "Failed to process epoch");
+      }
+    },
+  });
+}
+
+/**
+ * Claim a processed withdrawal
+ *
+ * NOTE: The smart contract has onlyMarket modifier on claimWithdrawal,
+ * but the function logic checks msg.sender == lender, which would fail
+ * if called through Market. This appears to be a smart contract bug.
+ *
+ * This implementation assumes the modifier will be fixed to allow direct user calls.
+ * If not fixed, this function will revert with "UnauthorizedCaller".
+ */
+export function useClaimWithdrawal() {
+  const qc = useQueryClient();
+  const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient();
+
+  return useMutation({
+    mutationFn: async ({ marketAddress, requestId }: ClaimWithdrawalParams) => {
+      // Step 1: Read LiquidityQueue address from Market
+      toast.info("Getting LiquidityQueue address…");
+      const liquidityQueueAddr = (await readContract(wagmiConfig, {
+        address: marketAddress as Address,
+        abi: MARKET_ABI,
+        functionName: "liquidityQueue",
+      })) as Address;
+
+      // Step 2: Read withdrawal request details to get fulfilled amount
+      const request = (await publicClient!.readContract({
+        address: liquidityQueueAddr,
+        abi: LIQUIDITY_QUEUE_ABI,
+        functionName: "getWithdrawalRequest",
+        args: [BigInt(requestId)],
+      })) as any;
+
+      if (!request.processed) {
+        throw new Error("Withdrawal not processed yet. Wait for epoch to complete.");
+      }
+
+      if (request.claimed) {
+        throw new Error("Withdrawal already claimed");
+      }
+
+      const fulfilledAmount = request.fulfilledAmount;
+      if (fulfilledAmount === BigInt(0)) {
+        throw new Error("No funds available to claim");
+      }
+
+      // Step 3: Call LiquidityQueue.claimWithdrawal()
+      toast.info("Claiming withdrawal on-chain…");
+      const txHash = await writeContractAsync({
+        address: liquidityQueueAddr,
+        abi: LIQUIDITY_QUEUE_ABI,
+        functionName: "claimWithdrawal",
+        args: [BigInt(requestId), fulfilledAmount],
+      });
+
+      await publicClient!.waitForTransactionReceipt({ hash: txHash });
+
+      return txHash;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.withdrawals.all() });
+      qc.invalidateQueries({ queryKey: queryKeys.positions.all() });
+      toast.success("Withdrawal claimed successfully");
+    },
+    onError: (e: Error) => {
+      console.error("Claim withdrawal failed:", e);
+      if (e.message?.includes("User rejected")) {
+        toast.error("Transaction rejected by user");
+      } else if (e.message?.includes("UnauthorizedCaller")) {
+        toast.error("Smart contract issue: claimWithdrawal has onlyMarket modifier. Contact admin.");
+      } else if (e.message?.includes("EpochNotComplete")) {
+        toast.error("Epoch not processed yet");
+      } else if (e.message?.includes("PositionAlreadyRedeemed")) {
+        toast.error("Withdrawal already claimed");
+      } else {
+        toast.error(e.message || "Failed to claim withdrawal");
+      }
+    },
+  });
+}

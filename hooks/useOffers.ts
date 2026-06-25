@@ -23,6 +23,22 @@ export function useOffers(params?: OffersParams) {
   });
 }
 
+/**
+ * Get all active offers for a specific market
+ * Used by borrowers to see available liquidity
+ */
+export function useMarketOffers(marketAddress: string | undefined) {
+  return useQuery({
+    queryKey: ['offers', 'byMarket', marketAddress],
+    queryFn: () => offerService.getOffers({
+      market_address: marketAddress,
+      status: 'active'
+    }),
+    enabled: !!marketAddress,
+    refetchInterval: 30_000, // Refresh every 30 seconds
+  });
+}
+
 export function useOffer(id: number) {
   return useQuery({
     queryKey: queryKeys.offers.detail(id),
@@ -154,5 +170,57 @@ export function useQuote(params?: QuoteRequest) {
     queryKey: queryKeys.offers.quote(params),
     queryFn: () => offerService.getQuote(params!),
     enabled: !!params?.market_address && !!params.borrow_amount,
+  });
+}
+
+export interface CleanupExpiredOffersParams {
+  marketAddress: string;
+  maxCleanup?: number;
+}
+
+/**
+ * Cleanup expired offers in the OfferBook
+ * This is a utility function anyone can call to help maintain the offer book
+ * @param maxCleanup Maximum number of offers to cleanup in one transaction (default: 10)
+ */
+export function useCleanupExpiredOffers() {
+  const qc = useQueryClient();
+  const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient();
+
+  return useMutation({
+    mutationFn: async ({ marketAddress, maxCleanup = 10 }: CleanupExpiredOffersParams) => {
+      // Get OfferBook address from Market contract
+      toast.info("Getting OfferBook address…");
+      const offerBookAddr = (await readContract(wagmiConfig, {
+        address: marketAddress as `0x${string}`,
+        abi: MARKET_ABI,
+        functionName: "offerBook",
+      })) as `0x${string}`;
+
+      // Call OfferBook.cleanupExpiredOffers()
+      toast.info(`Cleaning up expired offers...`);
+      const txHash = await writeContractAsync({
+        address: offerBookAddr,
+        abi: OFFER_BOOK_ABI,
+        functionName: "cleanupExpiredOffers",
+        args: [BigInt(maxCleanup)],
+      });
+
+      await publicClient!.waitForTransactionReceipt({ hash: txHash });
+      return txHash;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.offers.all() });
+      toast.success("Expired offers cleaned up successfully");
+    },
+    onError: (e: Error) => {
+      console.error("Cleanup expired offers failed:", e);
+      if (e.message?.includes("User rejected")) {
+        toast.error("Transaction rejected by user");
+      } else {
+        toast.error(e.message || "Failed to cleanup expired offers");
+      }
+    },
   });
 }

@@ -192,6 +192,9 @@ export interface Withdrawal {
   lender: string;
   market_address?: string;
   amount: string;
+  fulfilled_amount?: string;
+  claimed?: boolean;
+  epoch_number?: number;
   status: WithdrawalStatus;
   requested_at: number;
   processed_at?: number;

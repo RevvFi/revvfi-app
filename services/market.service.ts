@@ -6,6 +6,7 @@ export interface MarketsParams {
   limit?: number;
   is_active?: boolean;
   search?: string;
+  borrower?: string; // Filter markets by borrower address
 }
 
 export const marketService = {

@@ -56,12 +56,22 @@ import {
   useOraclePrice,
 } from "@/hooks/useOracleAdmin";
 
+import {
+  useRegisterMarket,
+  useUnregisterMarket,
+  useSetBaseURI,
+} from "@/hooks/usePositionNFTAdmin";
+
+import { useProcessEpoch } from "@/hooks/usePositions";
+import { useCurrentEpochStatus } from "@/hooks/useLiquidityQueueMetrics";
+
 import { MarketSelector } from "@/components/MarketSelector";
 import { useMarkets } from "@/hooks/useMarkets";
 
 // Contract addresses from env
 const FACTORY_ADDRESS = (process.env.NEXT_PUBLIC_FACTORY_ADDRESS || "") as `0x${string}`;
 const LIQUIDATOR_ADDRESS = (process.env.NEXT_PUBLIC_LIQUIDATOR_ADDRESS || "") as `0x${string}`;
+const POSITION_NFT_ADDRESS = (process.env.NEXT_PUBLIC_POSITION_NFT_ADDRESS || "") as `0x${string}`;
 
 export default function AdminDashboard() {
   const { address } = useAccount();
@@ -89,6 +99,12 @@ export default function AdminDashboard() {
   const [oracleAddress, setOracleAddress] = useState("");
   const [newOraclePrice, setNewOraclePrice] = useState("");
 
+  // New states for PositionNFT and Epoch processing
+  const [nftMarketAddress, setNftMarketAddress] = useState("");
+  const [nftBaseURI, setNftBaseURI] = useState("");
+  const [epochNumber, setEpochNumber] = useState("");
+  const [epochLiquidity, setEpochLiquidity] = useState("");
+
   // Hooks
   const { data: markets } = useMarkets({ is_active: true });
   const { data: deploymentFee } = useDeploymentFee();
@@ -97,6 +113,7 @@ export default function AdminDashboard() {
   const auctionParams = useAuctionParams(LIQUIDATOR_ADDRESS);
   const collateralParams = useCollateralParams(escrowAddress as `0x${string}`);
   const oracleData = useOraclePrice(oracleAddress as `0x${string}`);
+  const epochStatus = useCurrentEpochStatus(selectedMarket as `0x${string}`);
 
   // Mutations
   const setDeploymentFee = useSetDeploymentFee();
@@ -110,6 +127,10 @@ export default function AdminDashboard() {
   const setGuardian = useSetGuardian();
   const endLiquidation = useEndLiquidation();
   const setAuctionDurationMutation = useSetAuctionDuration(LIQUIDATOR_ADDRESS);
+  const registerMarket = useRegisterMarket();
+  const unregisterMarket = useUnregisterMarket();
+  const setBaseURI = useSetBaseURI();
+  const processEpoch = useProcessEpoch();
   const setMinBidIncrementBpsMutation = useSetMinBidIncrementBps(LIQUIDATOR_ADDRESS);
   const setAuctionExtensionWindowMutation = useSetAuctionExtensionWindow(LIQUIDATOR_ADDRESS);
   const setDutchAuctionParamsMutation = useSetDutchAuctionParams(LIQUIDATOR_ADDRESS);
@@ -266,6 +287,87 @@ export default function AdminDashboard() {
               >
                 Update Fee Recipient
               </Button>
+            </div>
+          </Card>
+
+          {/* POSITION NFT ADMIN */}
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-on-surface mb-4">Position NFT Management</h3>
+            <div className="space-y-6">
+              {/* Register Market */}
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-on-surface-variant">Register Market for NFT Minting</p>
+                <Input
+                  label="Market Address"
+                  value={nftMarketAddress}
+                  onChange={(e) => setNftMarketAddress(e.target.value)}
+                  placeholder="0x..."
+                />
+                <Button
+                  onClick={() => {
+                    if (!nftMarketAddress) {
+                      toast.error("Please enter a market address");
+                      return;
+                    }
+                    registerMarket.mutate({ marketAddress: nftMarketAddress as `0x${string}` });
+                    setNftMarketAddress("");
+                  }}
+                  loading={registerMarket.isPending}
+                  disabled={!nftMarketAddress}
+                >
+                  Register Market
+                </Button>
+              </div>
+
+              {/* Unregister Market */}
+              <div className="space-y-3 pt-4 border-t border-outline-variant/20">
+                <p className="text-sm font-semibold text-on-surface-variant">Unregister Market</p>
+                <Button
+                  onClick={() => {
+                    if (!nftMarketAddress) {
+                      toast.error("Please enter a market address above");
+                      return;
+                    }
+                    unregisterMarket.mutate({ marketAddress: nftMarketAddress as `0x${string}` });
+                  }}
+                  loading={unregisterMarket.isPending}
+                  disabled={!nftMarketAddress}
+                  variant="destructive"
+                >
+                  Unregister Market
+                </Button>
+              </div>
+
+              {/* Set Base URI */}
+              <div className="space-y-3 pt-4 border-t border-outline-variant/20">
+                <p className="text-sm font-semibold text-on-surface-variant">NFT Metadata Base URI</p>
+                <Input
+                  label="Base URI"
+                  value={nftBaseURI}
+                  onChange={(e) => setNftBaseURI(e.target.value)}
+                  placeholder="https://api.revvfi.com/nft/metadata/"
+                />
+                <Button
+                  onClick={() => {
+                    if (!nftBaseURI) {
+                      toast.error("Please enter a base URI");
+                      return;
+                    }
+                    setBaseURI.mutate({ baseURI: nftBaseURI });
+                    setNftBaseURI("");
+                  }}
+                  loading={setBaseURI.isPending}
+                  disabled={!nftBaseURI}
+                >
+                  Update Base URI
+                </Button>
+              </div>
+
+              <div className="text-xs text-on-surface-variant bg-surface-container-low p-3 rounded">
+                <p className="font-semibold mb-1">ℹ️ Position NFT Info</p>
+                <p>Address: <span className="font-mono">{formatAddress(POSITION_NFT_ADDRESS)}</span></p>
+                <p className="mt-1">Register markets to allow them to mint position NFTs. Set the base URI for NFT metadata.</p>
+              </div>
             </div>
           </Card>
         </TabsContent>
@@ -556,6 +658,86 @@ export default function AdminDashboard() {
                       )}
                     </div>
                   )}
+                </div>
+              </Card>
+
+              {/* EPOCH PROCESSING */}
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold text-on-surface mb-4">Withdrawal Epoch Processing</h3>
+                <div className="space-y-4">
+                  {epochStatus && (
+                    <div className="p-4 bg-surface-container rounded-lg space-y-2">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-xs text-on-surface-variant">Current Epoch</p>
+                          <p className="text-lg font-semibold text-on-surface">
+                            #{epochStatus.epochNumber?.toString() || "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-on-surface-variant">Time Remaining</p>
+                          <p className="text-lg font-semibold text-on-surface">
+                            {epochStatus.timeRemaining ?
+                              `${(Number(epochStatus.timeRemaining) / 3600).toFixed(1)}h` :
+                              "—"}
+                          </p>
+                        </div>
+                      </div>
+                      {epochStatus.epochDetails && (
+                        <div className="pt-2 border-t border-outline-variant/20 text-xs space-y-1">
+                          <p><span className="text-on-surface-variant">Start:</span> {new Date(Number(epochStatus.epochDetails.startTime) * 1000).toLocaleString()}</p>
+                          <p><span className="text-on-surface-variant">End:</span> {new Date(Number(epochStatus.epochDetails.endTime) * 1000).toLocaleString()}</p>
+                          <p><span className="text-on-surface-variant">Processed:</span> {epochStatus.epochDetails.processed ? "Yes ✓" : "No"}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <Input
+                    label="Epoch Number to Process"
+                    type="number"
+                    value={epochNumber}
+                    onChange={(e) => setEpochNumber(e.target.value)}
+                    placeholder="Enter epoch number"
+                  />
+                  <Input
+                    label={`Available Liquidity (${selectedMarketData?.borrow_asset.symbol || "USDC"})`}
+                    type="number"
+                    value={epochLiquidity}
+                    onChange={(e) => setEpochLiquidity(e.target.value)}
+                    placeholder="0.00"
+                  />
+                  <Button
+                    onClick={() => {
+                      if (!epochNumber || !epochLiquidity) {
+                        toast.error("Please enter epoch number and liquidity amount");
+                        return;
+                      }
+                      if (!selectedMarket || !selectedMarketData) {
+                        toast.error("Please select a market first");
+                        return;
+                      }
+                      processEpoch.mutate({
+                        marketAddress: selectedMarket,
+                        epochNumber: parseInt(epochNumber),
+                        availableLiquidity: epochLiquidity,
+                        borrowAssetDecimals: selectedMarketData.borrow_asset.decimals,
+                      });
+                      setEpochNumber("");
+                      setEpochLiquidity("");
+                    }}
+                    loading={processEpoch.isPending}
+                    disabled={!epochNumber || !epochLiquidity}
+                    className="w-full"
+                  >
+                    Process Epoch
+                  </Button>
+
+                  <div className="text-xs text-on-surface-variant bg-surface-container-low p-3 rounded">
+                    <p className="font-semibold mb-1">⏱️ Epoch Processing Info</p>
+                    <p>Epochs run for 7 days. Process an epoch after it ends to fulfill pro-rata withdrawal requests based on available liquidity.</p>
+                    <p className="mt-1">Users can claim their fulfilled withdrawals after epoch is processed.</p>
+                  </div>
                 </div>
               </Card>
             </>

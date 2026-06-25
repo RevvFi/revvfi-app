@@ -6,6 +6,7 @@ export interface PositionsParams {
   limit?: number;
   status?: string;
   market_address?: string;
+  lender?: string; // Filter positions by lender address
 }
 
 export const positionService = {

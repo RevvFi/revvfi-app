@@ -1,5 +1,7 @@
 import axios, { AxiosError, type AxiosRequestConfig } from "axios";
+import { v4 as uuidv4 } from "uuid";
 import type { ApiError } from "@/types";
+import { logger } from "./logger";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL!;
 
@@ -9,21 +11,55 @@ export const apiClient = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-// Attach JWT from localStorage on every request (client-side only)
+// Attach JWT and Correlation ID on every request (client-side only)
 apiClient.interceptors.request.use((config) => {
+  // Generate correlation ID for request tracing
+  const correlationId = uuidv4();
+  config.headers["X-Correlation-ID"] = correlationId;
+  (config as any).correlationId = correlationId;
+
+  // Attach JWT token if available
   if (typeof window !== "undefined") {
     const token = localStorage.getItem("revvfi_jwt");
     if (token) {
       config.headers["Authorization"] = `Bearer ${token}`;
     }
   }
+
+  logger.debug("API request starting", {
+    correlation_id: correlationId,
+    method: config.method,
+    url: config.url,
+  });
+
   return config;
 });
 
 // Normalize errors; clear auth state on 401
 apiClient.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    // Log successful response
+    const correlationId = (res.config as any).correlationId;
+    logger.debug("API request completed", {
+      correlation_id: correlationId,
+      status_code: res.status,
+      method: res.config.method,
+      url: res.config.url,
+    });
+    return res;
+  },
   (err: AxiosError<ApiError>) => {
+    const correlationId = (err.config as any)?.correlationId;
+
+    // Log error
+    logger.error("API request failed", err, {
+      correlation_id: correlationId,
+      status_code: err.response?.status,
+      method: err.config?.method,
+      url: err.config?.url,
+      error_message: err.response?.data?.error?.message || err.message,
+    });
+
     if (err.response?.status === 401 && typeof window !== "undefined") {
       // Clear stored token so user is prompted to re-authenticate
       localStorage.removeItem("revvfi_jwt");

@@ -33,17 +33,9 @@ export function useBorrowerRisk(address: string) {
   });
 }
 
-export function useRegisterBorrower() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: borrowerService.registerBorrower,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.borrowers.detail("") });
-      toast.success("Borrower registered successfully");
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-}
+// NOTE: useRegisterBorrower has been removed from here.
+// Use the blockchain-based implementation from hooks/useArchController.ts instead.
+// import { useRegisterBorrower } from '@/hooks/useArchController';
 
 export interface DepositCollateralParams {
   marketAddress: string;
@@ -180,7 +172,7 @@ export function useBorrow() {
 
       return txHash;
     },
-    onSuccess: (hash) => {
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.positions.all() });
       qc.invalidateQueries({ queryKey: queryKeys.positions.portfolio });
       qc.invalidateQueries({ queryKey: queryKeys.markets.all() });

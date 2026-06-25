@@ -22,6 +22,19 @@ export function useMarkets(params?: MarketsParams) {
   });
 }
 
+/**
+ * Get all markets where the user is the borrower
+ * Used in portfolio to show borrower's markets
+ */
+export function useMyMarkets(borrowerAddress: string | undefined) {
+  return useQuery({
+    queryKey: ['markets', 'myMarkets', borrowerAddress],
+    queryFn: () => marketService.getMarkets({ borrower: borrowerAddress }),
+    enabled: !!borrowerAddress,
+    refetchInterval: 30_000, // Refresh every 30 seconds
+  });
+}
+
 export function useMarket(address: string) {
   return useQuery({
     queryKey: queryKeys.markets.detail(address),

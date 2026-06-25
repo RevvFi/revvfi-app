@@ -128,13 +128,17 @@ export function ConnectWalletButton() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent title="Connect Wallet" description="Connect your wallet to access RevvFi">
           <div className="p-6 pt-4 space-y-3">
-            {connectors.map((connector) => (
+            {connectors
+              .filter((c, i, arr) => arr.findIndex(x => x.name === c.name) === i)
+              .map((connector) => (
               <button
                 key={connector.id}
                 disabled={isPending}
                 onClick={() => {
-                  connect({ connector });
                   setOpen(false);
+                  connect({ connector }, {
+                    onSuccess: () => { if (!isAuthenticated) login(); },
+                  });
                 }}
                 className="flex w-full items-center gap-3 rounded-lg border border-outline-variant/30 bg-surface-container-low px-4 py-3 text-sm text-on-surface hover:bg-surface-container-high transition-colors disabled:opacity-50"
               >

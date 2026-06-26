@@ -4,21 +4,20 @@ import { useAccount } from "wagmi";
 import { usePortfolio, usePositions } from "@/hooks/usePositions";
 import { useMarkets } from "@/hooks/useMarkets";
 import { useLiquidations } from "@/hooks/useAuctions";
-import { useBorrower } from "@/hooks/useBorrower";
+import { useBorrower, useBorrowerRisk } from "@/hooks/useBorrower";
 import { Card, MetricCard } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/badge";
 import { Skeleton, SkeletonCard } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { formatAddress, formatAPR, formatTimestamp, statusColor } from "@/lib/utils";
-import { useAuthStore } from "@/store/auth.store";
+import { HealthFactorRing } from "@/components/HealthFactorRing";
+import { TokenPair } from "@/components/TokenIcon";
+import { formatAddress, formatAPR, fmtUSD, reputationColor } from "@/lib/utils";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from "recharts";
 import Link from "next/link";
-import { ArrowUpRight, TrendingUp, Activity, Wallet, Shield } from "lucide-react";
-
-const CHART_COLORS = ["#ff5a1f", "#8ecdff", "#ffb68d", "#4ade80"];
+import { ArrowUpRight, TrendingUp, Activity, Wallet, Shield, Zap, LayoutDashboard } from "lucide-react";
 
 const MOCK_PERF = [
   { day: "Mon", value: 1200000 }, { day: "Tue", value: 1240000 },
@@ -29,26 +28,26 @@ const MOCK_PERF = [
 
 export default function DashboardPage() {
   const { address } = useAccount();
-  const { user, isAuthenticated } = useAuthStore();
   const { data: portfolio, isLoading: portfolioLoading } = usePortfolio();
   const { data: positions, isLoading: positionsLoading } = usePositions({ limit: 5 });
   const { data: markets } = useMarkets({ is_active: true });
   const { data: liquidations } = useLiquidations();
   const { data: borrower } = useBorrower(address ?? "");
+  const { data: risk } = useBorrowerRisk(address ?? "");
 
-  const totalValue = portfolio?.total_value ?? "0";
+  const totalValue      = portfolio?.total_value ?? "0";
   const activePositions = portfolio?.active_positions ?? 0;
-  const avgAPR = portfolio?.avg_apr ?? 0;
-  const earnedInterest = portfolio?.earned_interest ?? "0";
+  const avgAPR          = portfolio?.avg_apr ?? 0;
+  const earnedInterest  = portfolio?.earned_interest ?? "0";
 
-  const allocationData = [
-    { name: "Active", value: activePositions || 1 },
-    { name: "Settled", value: portfolio?.settled_positions || 0 },
-  ];
+  const outstandingDebt = borrower
+    ? (parseFloat(borrower.total_borrowed) - parseFloat(borrower.total_repaid))
+    : 0;
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-350 mx-auto">
-      {/* Page header */}
+
+      {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant mb-1">
@@ -65,47 +64,93 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Top Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* ── Borrower health banner (only when registered) ──────────────── */}
+      {borrower && (
+        <Card className="p-4 sm:p-5 border-primary/20">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
+            {/* Ring + label */}
+            <div className="flex items-center gap-4 shrink-0">
+              <HealthFactorRing value={risk?.health_factor ?? 0} size="sm" />
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Health Factor</p>
+                <p className="text-[10px] text-on-surface-variant mt-0.5">Liquidation threshold: 1.10</p>
+              </div>
+            </div>
+
+            {/* Debt stats */}
+            <div className="flex flex-wrap gap-4 sm:gap-6 flex-1">
+              <div>
+                <p className="text-xs text-on-surface-variant">Total Borrowed</p>
+                <p className="text-base font-bold mono text-on-surface">{fmtUSD(borrower.total_borrowed)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-on-surface-variant">Outstanding Debt</p>
+                <p className="text-base font-bold mono text-on-surface">
+                  {outstandingDebt > 0 ? fmtUSD(outstandingDebt.toString(), 0) : "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-on-surface-variant">Active Loans</p>
+                <p className="text-base font-bold mono text-on-surface">{borrower.active_loans || "0"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-on-surface-variant">Reputation</p>
+                <p className={`text-base font-bold mono ${reputationColor(borrower.reputation_score)}`}>
+                  {borrower.reputation_score}
+                </p>
+              </div>
+            </div>
+
+            {/* CTA */}
+            <Link href="/borrow" className="shrink-0 w-full sm:w-auto">
+              <Button size="sm" className="gap-1.5 w-full sm:w-auto">
+                <Zap className="h-3.5 w-3.5" /> Borrow Portal
+              </Button>
+            </Link>
+          </div>
+        </Card>
+      )}
+
+      {/* ── Top metrics ────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {portfolioLoading ? (
           Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} rows={1} />)
         ) : (
           <>
             <MetricCard
               label="Total Value"
-              value={`$${(parseFloat(totalValue) / 1e6).toFixed(2)}M`}
-              trend={{ value: "+4.2% this month", positive: true }}
+              value={fmtUSD(totalValue)}
               sub="Across all positions"
             />
             <MetricCard
               label="Active Positions"
-              value={activePositions}
-              sub={`${portfolio?.settled_positions ?? 0} settled`}
+              value={activePositions > 0 ? activePositions : "—"}
+              sub={portfolio?.settled_positions ? `${portfolio.settled_positions} settled` : undefined}
             />
             <MetricCard
               label="Avg. APR"
-              value={`${(avgAPR / 100).toFixed(2)}%`}
-              trend={{ value: "0.8% above market", positive: true }}
+              value={avgAPR > 0 ? formatAPR(avgAPR) : "—"}
             />
             <MetricCard
               label="Earned Interest"
-              value={`$${(parseFloat(earnedInterest) / 1e6).toFixed(4)}`}
+              value={fmtUSD(earnedInterest)}
               sub="Accrued to date"
             />
           </>
         )}
       </div>
 
-      {/* Charts row */}
+      {/* ── Charts row ─────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
         {/* Performance Chart */}
         <Card className="lg:col-span-2 p-5">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <div>
               <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
                 Portfolio Performance
               </p>
-              <p className="text-sm text-on-surface-variant mt-0.5">Cumulative value over time</p>
+              <p className="text-xs text-on-surface-variant mt-0.5">Illustrative — live data connected once positions are active</p>
             </div>
             <div className="flex gap-1">
               {["1D", "1W", "1M", "1Y"].map((t) => (
@@ -138,30 +183,36 @@ export default function DashboardPage() {
           </ResponsiveContainer>
         </Card>
 
-        {/* Reputation / Allocation */}
+        {/* Right column: Reputation + Quick Actions */}
         <div className="space-y-4">
+          {/* Reputation card */}
           {borrower ? (
             <Card className="p-5">
               <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant mb-3">
                 Reputation Score
               </p>
               <div className="flex items-center gap-4">
-                <div className="relative h-16 w-16">
+                <div className="relative h-14 w-14 shrink-0">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={[{ v: borrower.reputation_score }, { v: 1000 - borrower.reputation_score }]}
-                        cx="50%" cy="50%" innerRadius={22} outerRadius={30} dataKey="v" startAngle={90} endAngle={-270}>
+                      <Pie
+                        data={[{ v: borrower.reputation_score }, { v: Math.max(0, 1000 - borrower.reputation_score) }]}
+                        cx="50%" cy="50%" innerRadius={20} outerRadius={28}
+                        dataKey="v" startAngle={90} endAngle={-270}
+                      >
                         <Cell fill="#ff5a1f" />
                         <Cell fill="#43312b" />
                       </Pie>
                     </PieChart>
                   </ResponsiveContainer>
-                  <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-primary">
+                  <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-primary">
                     {borrower.reputation_score}
                   </span>
                 </div>
                 <div>
-                  <p className="text-lg font-bold text-on-surface">{borrower.risk_label}</p>
+                  <p className={`text-base font-bold ${reputationColor(borrower.reputation_score)}`}>
+                    {borrower.risk_label}
+                  </p>
                   <p className="text-xs text-on-surface-variant">Institutional tier</p>
                   <Link href="/reputation" className="text-xs text-primary hover:underline mt-1 flex items-center gap-1">
                     View details <ArrowUpRight className="h-3 w-3" />
@@ -172,51 +223,60 @@ export default function DashboardPage() {
           ) : (
             <Card className="p-5">
               <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant mb-3">
-                Reputation Score
+                Borrower Status
               </p>
               <div className="flex items-center gap-3">
-                <div className="h-12 w-12 rounded-full bg-outline-variant/20 flex items-center justify-center">
-                  <Shield className="h-6 w-6 text-on-surface-variant" />
+                <div className="h-10 w-10 rounded-full bg-outline-variant/20 flex items-center justify-center shrink-0">
+                  <Shield className="h-5 w-5 text-on-surface-variant" />
                 </div>
                 <div>
-                  <p className="text-sm text-on-surface-variant">Not registered as borrower</p>
+                  <p className="text-sm text-on-surface">Not registered as borrower</p>
                   <Link href="/borrow" className="text-xs text-primary hover:underline mt-1 block">
-                    Register now →
+                    Register to access borrowing →
                   </Link>
                 </div>
               </div>
             </Card>
           )}
 
+          {/* Quick Actions */}
           <Card className="p-5">
             <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant mb-3">
-              Asset Allocation
+              Quick Actions
             </p>
-            <div className="space-y-2">
+            <div className="space-y-1">
               {[
-                { label: "Stablecoins", pct: 54, color: "#ff5a1f" },
-                { label: "Majors (BTC/ETH)", pct: 32, color: "#8ecdff" },
-                { label: "Altcoins", pct: 10, color: "#ffb68d" },
-                { label: "Liquidity", pct: 4, color: "#4ade80" },
-              ].map(({ label, pct, color }) => (
-                <div key={label} className="flex items-center gap-2">
-                  <div className="w-24 text-xs text-on-surface-variant truncate">{label}</div>
-                  <div className="flex-1 h-1.5 rounded-full bg-outline-variant/20">
-                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+                { label: "Browse Markets",  desc: "Find markets to lend in",   href: "/markets",   Icon: TrendingUp   },
+                { label: "Borrow Portal",   desc: "Manage your debt",          href: "/borrow",    Icon: Zap          },
+                { label: "Lend Capital",    desc: "Create offers for borrowers",href: "/lend",      Icon: Wallet       },
+                { label: "View Portfolio",  desc: "Track all positions",        href: "/portfolio", Icon: Activity     },
+              ].map(({ label, desc, href, Icon }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/[0.04] transition-colors group"
+                >
+                  <div className="h-7 w-7 rounded-md bg-primary-container/10 flex items-center justify-center shrink-0">
+                    <Icon className="h-3.5 w-3.5 text-primary-container" />
                   </div>
-                  <span className="text-xs text-on-surface-variant w-8 text-right">{pct}%</span>
-                </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-on-surface group-hover:text-primary transition-colors">{label}</p>
+                    <p className="text-[10px] text-on-surface-variant">{desc}</p>
+                  </div>
+                  <ArrowUpRight className="h-3 w-3 text-on-surface-variant/30 group-hover:text-primary transition-colors shrink-0" />
+                </Link>
               ))}
             </div>
           </Card>
         </div>
       </div>
 
-      {/* Positions & Activity */}
+      {/* ── Positions & Markets ────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Recent Positions */}
+
+        {/* Active Positions */}
         <Card>
-          <div className="flex items-center justify-between p-5 pb-0">
+          <div className="flex items-center justify-between p-5 pb-3">
             <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
               Active Positions
             </p>
@@ -224,7 +284,7 @@ export default function DashboardPage() {
               View All <ArrowUpRight className="h-3 w-3" />
             </Link>
           </div>
-          <div className="p-5 pt-3 space-y-3">
+          <div className="px-5 pb-5 space-y-2">
             {positionsLoading ? (
               Array.from({ length: 3 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-3 py-2">
@@ -238,29 +298,33 @@ export default function DashboardPage() {
               ))
             ) : positions?.positions.length ? (
               positions.positions.slice(0, 5).map((pos) => (
-                <div key={pos.token_id} className="flex items-center gap-3 py-2 border-b border-outline-variant/10 last:border-0">
-                  <div className="h-8 w-8 rounded-lg bg-primary-container/15 flex items-center justify-center">
+                <div key={pos.token_id} className="flex items-center gap-3 py-2.5 border-b border-outline-variant/10 last:border-0">
+                  <div className="h-8 w-8 rounded-lg bg-primary-container/15 flex items-center justify-center shrink-0">
                     <Wallet className="h-4 w-4 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-on-surface">Token #{pos.token_id}</p>
                     <p className="text-xs text-on-surface-variant mono">{formatAddress(pos.market_address)}</p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-on-surface mono">{formatAPR(pos.apr)}</p>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-semibold text-primary mono">{formatAPR(pos.apr)}</p>
                     <StatusBadge status={pos.status} />
                   </div>
                 </div>
               ))
             ) : (
-              <p className="text-sm text-on-surface-variant py-6 text-center">No active positions</p>
+              <div className="flex flex-col items-center py-8 gap-2 text-center">
+                <LayoutDashboard className="h-8 w-8 text-on-surface-variant/30" />
+                <p className="text-sm text-on-surface-variant">No active positions</p>
+                <Link href="/lend" className="text-xs text-primary hover:underline">Create your first offer →</Link>
+              </div>
             )}
           </div>
         </Card>
 
         {/* Market Overview */}
         <Card>
-          <div className="flex items-center justify-between p-5 pb-0">
+          <div className="flex items-center justify-between p-5 pb-3">
             <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
               Market Overview
             </p>
@@ -268,36 +332,44 @@ export default function DashboardPage() {
               View All <ArrowUpRight className="h-3 w-3" />
             </Link>
           </div>
-          <div className="p-5 pt-3 space-y-3">
-            <div className="grid grid-cols-2 gap-3 mb-3">
+          <div className="px-5 pb-5 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
               <div className="rounded-lg bg-surface-container-low p-3">
                 <p className="text-xs text-on-surface-variant mb-1">Active Markets</p>
                 <p className="text-xl font-bold text-on-surface">{markets?.count ?? "—"}</p>
               </div>
               <div className="rounded-lg bg-surface-container-low p-3">
                 <p className="text-xs text-on-surface-variant mb-1">Liquidating</p>
-                <p className="text-xl font-bold text-orange-400">{liquidations?.count ?? 0}</p>
+                <p className={`text-xl font-bold ${(liquidations?.count ?? 0) > 0 ? "text-orange-400" : "text-on-surface"}`}>
+                  {liquidations?.count ?? 0}
+                </p>
               </div>
             </div>
-            {markets?.markets.slice(0, 3).map((m) => (
-              <Link
-                key={m.address}
-                href={`/markets/${m.address}`}
-                className="flex items-center justify-between py-2 border-b border-outline-variant/10 last:border-0 hover:bg-white/[0.02] -mx-1 px-1 rounded transition-colors"
-              >
-                <div>
-                  <p className="text-sm font-medium text-on-surface">
-                    {m.borrow_asset.symbol || formatAddress(m.borrow_asset.address, 4)} /&nbsp;
-                    {m.collateral_asset.symbol || formatAddress(m.collateral_asset.address, 4)}
-                  </p>
-                  <p className="text-xs text-on-surface-variant mono">{formatAddress(m.borrower)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm mono text-on-surface">{(m.utilization_rate * 100).toFixed(1)}%</p>
-                  <p className="text-xs text-on-surface-variant">Utilization</p>
-                </div>
-              </Link>
-            ))}
+            {markets?.markets.length ? (
+              markets.markets.slice(0, 3).map((m) => (
+                <Link
+                  key={m.address}
+                  href={`/markets/${m.address}`}
+                  className="flex items-center justify-between py-2.5 border-b border-outline-variant/10 last:border-0 hover:bg-white/[0.02] -mx-1 px-1 rounded transition-colors group"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <TokenPair from={m.collateral_asset.symbol} to={m.borrow_asset.symbol} size="xs" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-on-surface truncate">
+                        {m.collateral_asset.symbol} → {m.borrow_asset.symbol}
+                      </p>
+                      <p className="text-xs text-on-surface-variant mono">{formatAddress(m.borrower)}</p>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0 ml-2">
+                    <p className="text-sm mono font-semibold text-primary">{formatAPR(m.weighted_apr)}</p>
+                    <p className="text-[10px] text-on-surface-variant">{(m.utilization_rate * 100).toFixed(1)}% util</p>
+                  </div>
+                </Link>
+              ))
+            ) : (
+              <p className="text-sm text-on-surface-variant py-4 text-center">No active markets</p>
+            )}
           </div>
         </Card>
       </div>

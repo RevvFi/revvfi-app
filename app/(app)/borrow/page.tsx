@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAccount } from "wagmi";
 import {
   useBorrower,
@@ -23,8 +24,8 @@ import { Input } from "@/components/ui/input";
 import { StatusBadge, RiskBadge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, EmptyState } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Progress } from "@/components/ui/progress";
-import { formatAddress, formatAPR, formatTimestamp } from "@/lib/utils";
+import { formatAddress, formatAPR, formatTimestamp, fmtUSD } from "@/lib/utils";
+import { HealthFactorRing } from "@/components/HealthFactorRing";
 import { AlertTriangle, RefreshCw, ShieldCheck, Lock, TrendingUp, CheckCircle2, XCircle, DollarSign, Users } from "lucide-react";
 import { toast } from "sonner";
 import { MarketSelector } from "@/components/MarketSelector";
@@ -33,6 +34,7 @@ import { formatUnits } from "viem";
 
 export default function BorrowPage() {
   const { address } = useAccount();
+  const searchParams = useSearchParams();
   const { data: borrower, isLoading: borrowerLoading } = useBorrower(address ?? "");
   const { data: risk } = useBorrowerRisk(address ?? "");
   const { data: markets } = useMarkets({ is_active: true });
@@ -46,6 +48,12 @@ export default function BorrowPage() {
   const withdrawMutation = useWithdrawCollateral();
 
   const [selectedMarket, setSelectedMarket] = useState("");
+
+  // Pre-select market when navigating from market detail page (?market=0x...)
+  useEffect(() => {
+    const marketParam = searchParams.get("market");
+    if (marketParam) setSelectedMarket(marketParam);
+  }, [searchParams]);
   const [useSeniorOnly, setUseSeniorOnly] = useState(false);
 
   // NEW: Real-time market health metrics from blockchain
@@ -281,29 +289,31 @@ export default function BorrowPage() {
         ) : (
           <>
             <Card className="p-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Total Borrowed</p>
-              <p className="text-xl font-bold text-on-surface mt-1">
-                ${(parseFloat(borrower?.total_borrowed ?? "0") / 1e6).toFixed(2)}M
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">Total Borrowed</p>
+              <p className="text-xl font-semibold text-on-surface mono">{fmtUSD(borrower?.total_borrowed)}</p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">Outstanding Debt</p>
+              <p className="text-xl font-semibold text-on-surface mono">
+                {fmtUSD(
+                  String(
+                    Math.max(0, parseFloat(borrower?.total_borrowed ?? "0") - parseFloat(borrower?.total_repaid ?? "0"))
+                  )
+                )}
               </p>
             </Card>
             <Card className="p-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Outstanding Debt</p>
-              <p className="text-xl font-bold text-on-surface mt-1">
-                ${((parseFloat(borrower?.total_borrowed ?? "0") - parseFloat(borrower?.total_repaid ?? "0")) / 1e6).toFixed(2)}M
-              </p>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">Active Loans</p>
+              <p className="text-xl font-semibold text-on-surface mono">{borrower?.active_loans ?? 0}</p>
+            </Card>
+            {/* Health Factor — ring replaces flat progress bar */}
+            <Card className="p-4 flex flex-col items-center justify-center gap-1">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant self-stretch">Health Factor</p>
+              <HealthFactorRing value={healthFactor} size="sm" />
             </Card>
             <Card className="p-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Active Loans</p>
-              <p className="text-xl font-bold text-on-surface mt-1">{borrower?.active_loans ?? 0}</p>
-            </Card>
-            <Card className="p-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Health Factor</p>
-              <p className={`text-xl font-bold mt-1 ${hfColor}`}>{healthFactor.toFixed(2)}</p>
-              <Progress value={Math.min(100, Math.max(0, healthFactor * 50))} indicatorClassName={hfColor.replace("text-", "bg-")} className="mt-1.5" />
-            </Card>
-            <Card className="p-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Reputation</p>
-              <p className="text-xl font-bold text-primary mt-1">{borrower?.reputation_score ?? "—"}</p>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">Reputation</p>
+              <p className="text-xl font-semibold text-primary mono">{borrower?.reputation_score ?? "—"}</p>
               <RiskBadge label={borrower?.risk_label ?? "N/A"} />
             </Card>
           </>

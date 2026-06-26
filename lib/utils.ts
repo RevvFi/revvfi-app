@@ -89,6 +89,23 @@ export function formatCountdown(seconds: number): string {
   return [h, m, s].map((v) => String(v).padStart(2, "0")).join(":");
 }
 
+// Zero-aware USD formatter — returns "—" when raw value is zero/null/missing.
+// Accepts wei strings (default 6 decimals) or plain dollar numbers (pass decimals=0).
+export function fmtUSD(raw: string | number | null | undefined, decimals = 6): string {
+  if (raw === null || raw === undefined || raw === "" || raw === "0") return "—";
+  const n = (typeof raw === "number" ? raw : parseFloat(raw)) / Math.pow(10, decimals);
+  if (isNaN(n) || n === 0) return "—";
+  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+  if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(2)}K`;
+  return `$${n.toFixed(2)}`;
+}
+
+// Zero-aware number formatter — returns "—" for zero/null/undefined values.
+export function fmtNum(value: number | null | undefined, decimals = 2): string {
+  if (value === null || value === undefined || isNaN(value) || value === 0) return "—";
+  return value.toFixed(decimals);
+}
+
 export function formatBigWei(wei: string, decimals = 6): string {
   const n = parseFloat(wei) / Math.pow(10, decimals);
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;

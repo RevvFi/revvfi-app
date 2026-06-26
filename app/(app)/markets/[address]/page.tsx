@@ -16,18 +16,15 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, EmptyState } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { formatAddress, formatAPR, formatTimestamp } from "@/lib/utils";
-import { ArrowLeft, Share2, Plus, ExternalLink } from "lucide-react";
+import { ArrowLeft, Share2, Plus, ExternalLink, Zap } from "lucide-react";
+import { TokenPair } from "@/components/TokenIcon";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, AreaChart, Area,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area,
 } from "recharts";
 
 const MOCK_LIQUIDITY = [
   { time: "00:00", value: 4.2 }, { time: "06:00", value: 3.8 }, { time: "12:00", value: 5.1 },
   { time: "18:00", value: 4.6 }, { time: "23:59", value: 4.8 },
-];
-const MOCK_APR = [
-  { time: "Min", value: 4.2 }, { time: "Avg", value: 6.8 }, { time: "Max", value: 9.1 },
 ];
 
 export default function MarketDetailPage({ params }: { params: Promise<{ address: string }> }) {
@@ -80,8 +77,9 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
             <ArrowLeft className="h-3.5 w-3.5" /> Markets
           </Link>
           <div className="flex items-center gap-3 flex-wrap">
+            <TokenPair from={market.collateral_asset.symbol} to={market.borrow_asset.symbol} size="md" />
             <h1 className="text-2xl font-semibold text-on-surface">
-              {market.borrow_asset.symbol || "USDC"} / {market.collateral_asset.symbol || "ETH"} Market Details
+              {market.collateral_asset.symbol} → {market.borrow_asset.symbol} Market
             </h1>
             <StatusBadge status={market.is_active ? "active" : "inactive"} />
             {market.is_liquidating && <StatusBadge status="liquidating" />}
@@ -103,9 +101,9 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
             <Share2 className="h-3.5 w-3.5" /> Share Market
           </Button>
           {userRole === 'borrower' ? (
-            <Link href="/borrow">
+            <Link href={`/borrow?market=${address}`}>
               <Button className="gap-1.5">
-                Go to Borrow Portal
+                <Zap className="h-3.5 w-3.5" /> Go to Borrow Portal
               </Button>
             </Link>
           ) : (
@@ -121,9 +119,18 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
       {/* Top stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         {[
-          { label: "Health Factor", value: risk?.health_factor?.toFixed(2) ?? "—", sub: "Liquidation at < 1.10", color: risk?.health_factor && risk.health_factor > 1.5 ? "text-emerald-400" : "text-orange-400" },
-          { label: "Total Debt", value: `$${(parseFloat(market.total_debt) / 1e6).toFixed(2)}M`, sub: "USDC" },
-          { label: "TVL (Collateral)", value: `$${(parseFloat(market.total_principal) / 1e6).toFixed(2)}M`, sub: `LTV: ${utilizationPct.toFixed(1)}%` },
+          {
+            label: "Health Factor",
+            value: risk?.health_factor ? risk.health_factor.toFixed(2) : "—",
+            sub: "Liquidation at < 1.10",
+            color: !risk?.health_factor ? "text-on-surface-variant"
+              : risk.health_factor >= 2.0 ? "text-emerald-400"
+              : risk.health_factor >= 1.3 ? "text-amber-400"
+              : risk.health_factor >= 1.1 ? "text-orange-400"
+              : "text-red-400",
+          },
+          { label: "Total Debt", value: parseFloat(market.total_debt) > 0 ? `$${(parseFloat(market.total_debt) / 1e6).toFixed(2)}M` : "—", sub: "USDC" },
+          { label: "TVL (Collateral)", value: parseFloat(market.total_principal) > 0 ? `$${(parseFloat(market.total_principal) / 1e6).toFixed(2)}M` : "—", sub: `LTV: ${utilizationPct.toFixed(1)}%` },
           { label: "Est. Annual Interest", value: formatAPR(market.weighted_apr), sub: "Floating base rate", color: "text-primary" },
           { label: "Active Positions", value: metrics?.active_positions ?? 0, sub: "Lending positions" },
         ].map(({ label, value, sub, color }) => (
@@ -277,6 +284,24 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
             </TabsList>
           </div>
           <TabsContent value="offers" className="mt-0 px-0">
+            {/* Borrower CTA — shown when there are offers ready to borrow against */}
+            {userRole === 'borrower' && offers?.offers.length ? (
+              <div className="mx-5 mt-4 mb-2 flex items-center justify-between gap-3 rounded-lg border border-blue-500/25 bg-blue-500/10 px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold text-blue-400">
+                    {offers.offers.length} offer{offers.offers.length !== 1 ? "s" : ""} available — you can borrow now
+                  </p>
+                  <p className="text-xs text-on-surface-variant mt-0.5">
+                    Your Borrow Portal will open with this market pre-selected.
+                  </p>
+                </div>
+                <Link href={`/borrow?market=${address}`} className="shrink-0">
+                  <Button size="sm" className="gap-1.5">
+                    <Zap className="h-3.5 w-3.5" /> Borrow Now
+                  </Button>
+                </Link>
+              </div>
+            ) : null}
             <Table>
               <TableHeader>
                 <TableRow>
@@ -304,14 +329,14 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
                   <TableRow>
                     <TableCell colSpan={6}>
                       <EmptyState
-                    title="No offers yet"
-                    description={userRole === 'borrower'
-                      ? "No lenders have submitted offers for your market yet. Share your market to attract lenders."
-                      : "Be the first to supply liquidity to this market"}
-                    action={userRole === 'borrower'
-                      ? <Link href="/borrow"><Button size="sm">View Borrow Portal</Button></Link>
-                      : <Link href="/lend"><Button size="sm">Create Offer</Button></Link>}
-                  />
+                        title="No offers yet"
+                        description={userRole === 'borrower'
+                          ? "No lenders have submitted offers for your market yet. Share your market to attract lenders."
+                          : "Be the first to supply liquidity to this market"}
+                        action={userRole === 'borrower'
+                          ? <Link href={`/borrow?market=${address}`}><Button size="sm">View Borrow Portal</Button></Link>
+                          : <Link href="/lend"><Button size="sm">Create Offer</Button></Link>}
+                      />
                     </TableCell>
                   </TableRow>
                 )}

@@ -1,17 +1,21 @@
-import { useAccount } from 'wagmi';
-import { useMarkets } from '@/hooks/useMarkets';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+"use client";
+
+import { useAccount } from "wagmi";
+import { useMarkets } from "@/hooks/useMarkets";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { StatusBadge } from "@/components/ui/badge";
+import { TokenPair } from "@/components/TokenIcon";
+import { formatAddress } from "@/lib/utils";
+import { AlertCircle, TrendingUp } from "lucide-react";
 
 interface MarketSelectorProps {
   value: string | null;
   onValueChange: (value: string) => void;
   showBadge?: boolean;
   className?: string;
-  filterByBorrower?: boolean; // Only show markets where user is borrower
-  filterByLender?: boolean; // Only show markets where user is NOT borrower (can lend)
+  filterByBorrower?: boolean;
+  filterByLender?: boolean;
 }
 
 export function MarketSelector({
@@ -20,137 +24,129 @@ export function MarketSelector({
   showBadge = true,
   className,
   filterByBorrower = false,
-  filterByLender = false
+  filterByLender = false,
 }: MarketSelectorProps) {
   const { address } = useAccount();
   const { data: marketsData, isLoading } = useMarkets();
 
-  // Filter markets based on user role
-  let markets = marketsData?.markets || [];
+  let markets = marketsData?.markets ?? [];
 
   if (filterByBorrower && address) {
-    // Only show markets where user is the borrower
-    markets = markets.filter(m => m.borrower.toLowerCase() === address.toLowerCase());
+    markets = markets.filter((m) => m.borrower.toLowerCase() === address.toLowerCase());
   } else if (filterByLender && address) {
-    // Only show markets where user is NOT the borrower (can lend)
-    markets = markets.filter(m => m.borrower.toLowerCase() !== address.toLowerCase());
+    markets = markets.filter((m) => m.borrower.toLowerCase() !== address.toLowerCase());
   }
 
-  const selectedMarket = markets.find(m => m.address === value);
+  const selectedMarket = markets.find((m) => m.address === value);
 
-  // Determine user's role in the selected market
-  const getUserRole = (market: any) => {
-    if (!address) return 'observer';
-    if (market.borrower.toLowerCase() === address.toLowerCase()) return 'borrower';
-    // Check if user has offers or positions in this market (simplified)
-    return 'lender';
-  };
-
-  const getRoleBadge = (role: string) => {
-    switch (role) {
-      case 'borrower':
-        return <Badge variant="default" className="bg-blue-500">You are the Borrower</Badge>;
-      case 'lender':
-        return <Badge variant="info">You can lend here</Badge>;
-      case 'observer':
-        return <Badge variant="default" className="bg-gray-400">View only</Badge>;
-      default:
-        return null;
-    }
-  };
-
-  const formatAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-
-  if (isLoading) {
-    return <Skeleton className="h-10 w-full" />;
-  }
+  if (isLoading) return <Skeleton className="h-10 w-full" />;
 
   if (!markets.length) {
     const emptyMessage = filterByBorrower
-      ? "You don't have any markets. Contact admin to create a market for you."
+      ? "No markets are assigned to your address yet. Contact admin to create a market for you."
       : filterByLender
-      ? "No markets available for lending."
+      ? "No markets are available for lending at this time."
       : "No lending markets have been deployed yet.";
 
     return (
-      <Card className="border-yellow-200 bg-yellow-50">
-        <CardHeader>
-          <CardTitle className="text-sm">No Markets Available</CardTitle>
-          <p className="text-sm text-muted-foreground mt-2">{emptyMessage}</p>
-        </CardHeader>
-      </Card>
+      <div className={`rounded-lg border border-outline-variant/30 bg-surface-container p-4 flex items-start gap-3 ${className ?? ""}`}>
+        <AlertCircle className="h-4 w-4 text-on-surface-variant shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-medium text-on-surface">No markets available</p>
+          <p className="text-xs text-on-surface-variant mt-0.5">{emptyMessage}</p>
+        </div>
+      </div>
     );
   }
 
   return (
     <div className={className}>
-      <Select value={value || undefined} onValueChange={onValueChange}>
+      <Select value={value ?? undefined} onValueChange={onValueChange}>
         <SelectTrigger className="w-full">
-          <SelectValue placeholder="Select a market" />
+          <SelectValue placeholder="Select a market…">
+            {selectedMarket && (
+              <div className="flex items-center gap-2">
+                <TokenPair
+                  from={selectedMarket.collateral_asset.symbol}
+                  to={selectedMarket.borrow_asset.symbol}
+                  size="xs"
+                />
+                <span>
+                  {selectedMarket.collateral_asset.symbol} → {selectedMarket.borrow_asset.symbol}
+                </span>
+                <span className="text-xs text-on-surface-variant mono hidden sm:block">
+                  {formatAddress(selectedMarket.address)}
+                </span>
+              </div>
+            )}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
-          {markets.map((market) => {
-            return (
-              <SelectItem key={market.address} value={market.address}>
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">
-                    {market.borrow_asset?.symbol || 'Unknown'}/{market.collateral_asset?.symbol || 'Unknown'}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {formatAddress(market.address)}
-                  </span>
-                </div>
-              </SelectItem>
-            );
-          })}
+          {markets.map((market) => (
+            <SelectItem key={market.address} value={market.address}>
+              <div className="flex items-center gap-2 py-0.5">
+                <TokenPair
+                  from={market.collateral_asset.symbol}
+                  to={market.borrow_asset.symbol}
+                  size="xs"
+                />
+                <span className="font-medium">
+                  {market.collateral_asset.symbol} → {market.borrow_asset.symbol}
+                </span>
+                <span className="text-xs text-on-surface-variant mono">
+                  {formatAddress(market.address)}
+                </span>
+              </div>
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
 
       {selectedMarket && showBadge && (
-        <div className="mt-3 space-y-2">
-          <Card>
-            <CardContent className="pt-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <div className="text-sm font-medium">Market Details</div>
-                  <div className="text-xs text-muted-foreground">
-                    Address: {formatAddress(selectedMarket.address)}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    Borrower: {formatAddress(selectedMarket.borrower)}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    Status: <span className={selectedMarket.is_active ? "text-green-600" : "text-red-600"}>
-                      {selectedMarket.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-                </div>
-                <div>
-                  {getRoleBadge(getUserRole(selectedMarket))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="mt-3 rounded-lg border border-outline-variant/20 bg-surface-container p-3 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Selected Market</p>
+            <StatusBadge status={selectedMarket.is_active ? "active" : "inactive"} />
+          </div>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
+            <span className="text-on-surface-variant">Collateral</span>
+            <span className="text-on-surface font-medium">{selectedMarket.collateral_asset.symbol}</span>
+            <span className="text-on-surface-variant">Borrow Asset</span>
+            <span className="text-on-surface font-medium">{selectedMarket.borrow_asset.symbol}</span>
+            <span className="text-on-surface-variant">Borrower</span>
+            <span className="text-on-surface mono">{formatAddress(selectedMarket.borrower)}</span>
+            {selectedMarket.weighted_apr !== undefined && (
+              <>
+                <span className="text-on-surface-variant flex items-center gap-1">
+                  <TrendingUp className="h-3 w-3" /> Avg APR
+                </span>
+                <span className="text-primary font-semibold">
+                  {(selectedMarket.weighted_apr / 100).toFixed(2)}%
+                </span>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-// Export a simplified version for inline use
 export function MarketBadge({ marketAddress }: { marketAddress: string }) {
   const { address } = useAccount();
   const { data: marketsData } = useMarkets();
-
-  const market = marketsData?.markets.find(m => m.address === marketAddress);
+  const market = marketsData?.markets.find((m) => m.address === marketAddress);
 
   if (!market || !address) return null;
 
   const isBorrower = market.borrower.toLowerCase() === address.toLowerCase();
-
-  if (isBorrower) {
-    return <Badge variant="default" className="bg-blue-500">You are the Borrower</Badge>;
-  }
-
-  return <Badge variant="info">You can lend here</Badge>;
+  return (
+    <span className={`inline-flex items-center h-5 px-2 rounded text-[11px] font-semibold ${
+      isBorrower
+        ? "bg-blue-500/15 text-blue-400 border border-blue-500/25"
+        : "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25"
+    }`}>
+      {isBorrower ? "You: Borrower" : "You: Lender"}
+    </span>
+  );
 }

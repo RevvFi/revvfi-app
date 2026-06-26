@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAccount } from "wagmi";
 import {
@@ -32,7 +32,7 @@ import { MarketSelector } from "@/components/MarketSelector";
 import { useMarketCollateralBalance, useMinCollateralRatio, useMarketTotalDebt, calculateMaxBorrow } from "@/hooks/useMarketCollateral";
 import { formatUnits } from "viem";
 
-export default function BorrowPage() {
+function BorrowContent() {
   const { address } = useAccount();
   const searchParams = useSearchParams();
   const { data: borrower, isLoading: borrowerLoading } = useBorrower(address ?? "");
@@ -947,5 +947,13 @@ export default function BorrowPage() {
         </Table>
       </Card>
     </div>
+  );
+}
+
+export default function BorrowPage() {
+  return (
+    <Suspense>
+      <BorrowContent />
+    </Suspense>
   );
 }

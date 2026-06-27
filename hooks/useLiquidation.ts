@@ -2,15 +2,13 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useWriteContract, usePublicClient } from "wagmi";
-import { erc20Abi, parseUnits, type Address } from "viem";
+import { type Address } from "viem";
 import { toast } from "sonner";
 import { auctionService } from "@/services/auction.service";
-import { queryKeys } from "@/constants/query-keys";
-import { LIQUIDATOR_ABI } from "@/lib/contracts/abis";
-import { CONTRACT_ADDRESSES } from "@/lib/contracts/addresses";
 import type { Auction } from "@/types";
 
-// Inline ABI fragments — only what useLiquidationStatus needs, avoids Abi cast issues
+// ─── Inline ABI fragments (avoid casting the full compiled ABI) ───────────────
+
 const LIQUIDATION_STATUS_ABI = [
   {
     name: "isLiquidatable",
@@ -28,7 +26,18 @@ const LIQUIDATION_STATUS_ABI = [
   },
 ] as const;
 
-// Check if a market is liquidatable and get its current health factor
+const LIQUIDATE_ABI = [
+  {
+    name: "liquidate",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [],
+  },
+] as const;
+
+// ─── Market liquidation status (on-chain read) ────────────────────────────────
+
 export function useLiquidationStatus(marketAddress?: string) {
   const publicClient = usePublicClient();
 
@@ -51,18 +60,18 @@ export function useLiquidationStatus(marketAddress?: string) {
         }),
       ]);
 
-      // collateralRatio is in basis points (e.g. 12000 = 120%)
-      // Divide by 10000 to get a ratio number (1.20 = healthy, <1.00 = liquidatable)
+      // collateralRatio is basis points (e.g. 12000 = 120%)
+      // Divide by 10000 → ratio where < 1.0 means liquidatable
       const healthFactor = Number(collateralRatio) / 10000;
-
       return { isLiquidatable, healthFactor };
     },
     enabled: !!marketAddress && !!publicClient,
-    refetchInterval: 10_000,
+    refetchInterval: 15_000,
   });
 }
 
-// Fetch the active auction for a specific market (if any)
+// ─── Active auction for a specific market (API read) ─────────────────────────
+
 export function useActiveAuction(marketAddress?: string) {
   return useQuery({
     queryKey: ["active-auction", marketAddress],
@@ -72,130 +81,28 @@ export function useActiveAuction(marketAddress?: string) {
         const data = await auctionService.getAuctionsByMarket(marketAddress, "active");
         return data.auctions?.[0] ?? null;
       } catch {
-        return null; // graceful: if endpoint not deployed yet, show nothing
+        return null;
       }
     },
     enabled: !!marketAddress,
-    refetchInterval: 5_000,
+    refetchInterval: 10_000,
   });
 }
 
-// Calculate the current Dutch auction discount as a 0-100 percentage
-// Re-runs every second to animate the progress bar
+// ─── Dutch auction discount % (pure calculation, not a query) ────────────────
+
 export function useAuctionDiscount(auction: Auction | null | undefined): number {
-  const { data: discount } = useQuery({
-    queryKey: ["auction-discount", auction?.auction_id],
-    queryFn: () => {
-      if (!auction) return 0;
-      const now = Math.floor(Date.now() / 1000);
-      const duration = auction.end_time - auction.start_time;
-      if (duration <= 0) return 0;
-      const elapsed = now - auction.start_time;
-      if (elapsed <= 0) return 0;
-      if (elapsed >= duration) return 100;
-      return (elapsed / duration) * 100;
-    },
-    enabled: !!auction,
-    refetchInterval: 1_000,
-  });
-
-  return discount ?? 0;
-}
-export function useAuctions() {
-  return useQuery({
-    queryKey: queryKeys.auctions.liquidations(),
-    queryFn: () => auctionService.getLiquidations(),
-  });
+  if (!auction) return 0;
+  const now = Math.floor(Date.now() / 1000);
+  const duration = auction.end_time - auction.start_time;
+  if (duration <= 0) return 0;
+  const elapsed = now - auction.start_time;
+  if (elapsed <= 0) return 0;
+  if (elapsed >= duration) return 100;
+  return (elapsed / duration) * 100;
 }
 
-export function useAuction(auctionId: number) {
-  return useQuery({
-    queryKey: queryKeys.auctions.detail(auctionId),
-    queryFn: () => auctionService.getAuction(auctionId),
-    enabled: auctionId > 0,
-  });
-}
-
-export function useAuctionPrice(auctionId: number) {
-  return useQuery({
-    queryKey: ["auction-price", auctionId],
-    queryFn: () => auctionService.getAuctionPrice(auctionId),
-    enabled: auctionId > 0,
-    refetchInterval: 30_000, // Refresh every 30s (Dutch auction price decreases)
-  });
-}
-
-export interface PlaceBidParams {
-  auctionId: number;
-  bidAmount: string;
-  borrowAsset: Address;
-  borrowAssetDecimals: number;
-}
-
-export function usePlaceBid() {
-  const qc = useQueryClient();
-  const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient();
-
-  return useMutation({
-    mutationFn: async ({
-      auctionId,
-      bidAmount,
-      borrowAsset,
-      borrowAssetDecimals,
-    }: PlaceBidParams) => {
-      const bidWei = parseUnits(bidAmount, borrowAssetDecimals);
-      const liquidatorAddr = CONTRACT_ADDRESSES.liquidator;
-
-      // Step 1: Approve Liquidator to spend bid asset
-      toast.info("Step 1/2: Approving bid amount to Liquidator…");
-      const approveTx = await writeContractAsync({
-        address: borrowAsset,
-        abi: erc20Abi,
-        functionName: "approve",
-        args: [liquidatorAddr, bidWei],
-      });
-      await publicClient!.waitForTransactionReceipt({ hash: approveTx });
-
-      // Step 2: Place bid on auction
-      toast.info("Step 2/2: Placing bid on auction…");
-      const bidTx = await writeContractAsync({
-        address: liquidatorAddr,
-        abi: LIQUIDATOR_ABI,
-        functionName: "placeBid",
-        args: [BigInt(auctionId), bidWei],
-      });
-
-      const receipt = await publicClient!.waitForTransactionReceipt({ hash: bidTx });
-
-      if (receipt.status !== 'success') {
-        throw new Error("Transaction failed");
-      }
-
-      return bidTx;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.auctions.liquidations() });
-      toast.success("Bid placed successfully!");
-    },
-    onError: (e: Error) => {
-      console.error("Place bid failed:", e);
-      if (e.message?.includes("User rejected")) {
-        toast.error("Transaction rejected by user");
-      } else if (e.message?.includes("BidTooLow")) {
-        toast.error("Bid must be higher than current bid");
-      } else if (e.message?.includes("AuctionEnded")) {
-        toast.error("Auction has already ended");
-      } else if (e.message?.includes("BidExceedsDebt")) {
-        toast.error("Bid exceeds original debt amount");
-      } else if (e.message?.includes("InsufficientBalance")) {
-        toast.error("Insufficient balance to place bid");
-      } else {
-        toast.error(e.message || "Failed to place bid");
-      }
-    },
-  });
-}
+// ─── Trigger liquidation (blockchain write) ──────────────────────────────────
 
 export interface TriggerLiquidationParams {
   marketAddress: Address;
@@ -211,30 +118,26 @@ export function useTriggerLiquidation() {
       toast.info("Triggering liquidation…");
       const txHash = await writeContractAsync({
         address: marketAddress,
-        abi: [
-          {
-            name: "liquidate",
-            type: "function",
-            stateMutability: "nonpayable",
-            inputs: [],
-            outputs: [],
-          },
-        ] as const,
+        abi: LIQUIDATE_ABI,
         functionName: "liquidate",
       });
-
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
-
-      if (receipt.status !== 'success') {
-        throw new Error("Transaction failed");
-      }
-
+      if (receipt.status !== "success") throw new Error("Transaction failed");
       return txHash;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.auctions.liquidations() });
-      qc.invalidateQueries({ queryKey: queryKeys.markets.all() });
-      toast.success("Liquidation triggered successfully!");
+    // Use mutation variables so we can invalidate the exact market's cached queries
+    onSuccess: (_, { marketAddress }) => {
+      // Prefix-based: invalidates all ["auctions", ...] queries (detail, list, liquidations)
+      qc.invalidateQueries({ queryKey: ["auctions"] });
+      // Prefix-based: invalidates all ["markets", ...] queries
+      qc.invalidateQueries({ queryKey: ["markets"] });
+      // Prefix-based: on-chain market reads (collateral ratio, health, etc.)
+      qc.invalidateQueries({ queryKey: ["market"] });
+      // Market-specific: liquidation-status card on market detail page
+      qc.invalidateQueries({ queryKey: ["liquidation-status", marketAddress] });
+      // Market-specific: active-auction card on market detail page
+      qc.invalidateQueries({ queryKey: ["active-auction", marketAddress] });
+      toast.success("Liquidation triggered! Dutch auction started.");
     },
     onError: (e: Error) => {
       console.error("Trigger liquidation failed:", e);

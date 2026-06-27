@@ -12,8 +12,8 @@ import {
   useActiveAuction,
   useAuctionDiscount,
   useTriggerLiquidation,
-  usePlaceBid,
 } from "@/hooks/useLiquidation";
+import { usePlaceBid } from "@/hooks/useAuctions";
 import { MarketParticipants } from "@/components/MarketParticipants";
 import { Card } from "@/components/ui/card";
 import { StatusBadge, RiskBadge } from "@/components/ui/badge";
@@ -30,7 +30,7 @@ import { TokenPair } from "@/components/TokenIcon";
 import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area,
 } from "recharts";
-import type { Address } from "viem";
+import type { Address as EvmAddress } from "viem";
 
 const MOCK_LIQUIDITY = [
   { time: "00:00", value: 4.2 }, { time: "06:00", value: 3.8 }, { time: "12:00", value: 5.1 },
@@ -250,7 +250,7 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
               <Button
                 className="w-full gap-2"
                 variant="destructive"
-                onClick={() => triggerLiquidation({ marketAddress: address as Address })}
+                onClick={() => triggerLiquidation({ marketAddress: address as EvmAddress })}
                 disabled={isTriggeringLiquidation}
               >
                 <Gavel className="h-4 w-4" />
@@ -329,7 +329,7 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
                         placeBid({
                           auctionId: activeAuction.auction_id,
                           bidAmount,
-                          borrowAsset: market.borrow_asset.address as Address,
+                          borrowAssetAddress: market.borrow_asset.address,
                           borrowAssetDecimals: market.borrow_asset.decimals,
                         });
                         setBidAmount("");

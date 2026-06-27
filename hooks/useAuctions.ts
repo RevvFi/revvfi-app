@@ -92,9 +92,16 @@ export function usePlaceBid() {
       await publicClient!.waitForTransactionReceipt({ hash: bidTx });
       return bidTx;
     },
-    onSuccess: (hash) => {
-      qc.invalidateQueries({ queryKey: queryKeys.auctions.liquidations() });
-      toast.success(`Bid placed: ${hash.slice(0, 10)}…`);
+    onSuccess: (_, { auctionId }) => {
+      // All auction list queries (liquidations list, auction detail)
+      qc.invalidateQueries({ queryKey: ["auctions"] });
+      // Specific auction detail so bid amount + status update immediately
+      qc.invalidateQueries({ queryKey: queryKeys.auctions.detail(auctionId) });
+      // Active-auction card on market detail page — bid may settle the auction
+      qc.invalidateQueries({ queryKey: ["active-auction"] });
+      // Liquidation-status card — settling an auction changes market health state
+      qc.invalidateQueries({ queryKey: ["liquidation-status"] });
+      toast.success("Bid placed successfully!");
     },
     onError: (e: Error) => toast.error(e.message),
   });

@@ -113,7 +113,8 @@ function BorrowContent() {
         marketCollateral,
         collateralPriceUSD,
         minCollateralRatio,
-        totalDebt || BigInt(0)
+        totalDebt || BigInt(0),
+        totalLiquidity ?? undefined  // cap by available offer-book liquidity
       )
     : BigInt(0);
 

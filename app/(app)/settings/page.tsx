@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 export default function SettingsPage() {
-  const { address } = useAccount();
+  const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
   const { user, isAuthenticated } = useAuthStore();
   const { logout } = useSIWE();
@@ -43,6 +43,18 @@ export default function SettingsPage() {
     } catch (error) {
       console.error("Cancel offer failed:", error);
     }
+  }
+
+  if (!isConnected) {
+    return (
+      <div className="p-4 sm:p-6 flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <div className="h-16 w-16 rounded-full bg-surface-container flex items-center justify-center">
+          <Wallet className="h-8 w-8 text-on-surface-variant" />
+        </div>
+        <p className="text-lg font-semibold text-on-surface">Wallet not connected</p>
+        <p className="text-sm text-on-surface-variant">Connect your wallet to view settings</p>
+      </div>
+    );
   }
 
   return (

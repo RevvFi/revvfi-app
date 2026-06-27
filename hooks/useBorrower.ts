@@ -30,6 +30,7 @@ export function useBorrowerRisk(address: string) {
     queryKey: queryKeys.borrowers.risk(address),
     queryFn: () => borrowerService.getBorrowerRisk(address),
     enabled: !!address,
+    refetchInterval: 30_000,
   });
 }
 
@@ -83,8 +84,9 @@ export function useDepositCollateral() {
       return depositTx;
     },
     onSuccess: () => {
+      // Borrower record + all on-chain market-health reads (collateral ratio, totalAssets, etc.)
       qc.invalidateQueries({ queryKey: queryKeys.borrowers.detail("") });
-      toast.success("Collateral deposited successfully");
+      qc.invalidateQueries({ queryKey: ["market"] });
     },
     onError: (e: Error) => {
       console.error("Deposit collateral failed:", e);
@@ -130,6 +132,7 @@ export function useWithdrawCollateral() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.borrowers.detail("") });
+      qc.invalidateQueries({ queryKey: ["market"] });
       toast.success("Collateral withdrawn successfully");
     },
     onError: (e: Error) => {
@@ -199,6 +202,13 @@ export function useBorrow() {
       qc.invalidateQueries({ queryKey: queryKeys.positions.portfolio });
       qc.invalidateQueries({ queryKey: queryKeys.markets.all() });
       qc.invalidateQueries({ queryKey: queryKeys.borrowers.detail("") });
+      // Risk score and health factor
+      qc.invalidateQueries({ queryKey: ["borrowers", "risk"] });
+      // All on-chain market reads (debt, collateral ratio, health, max-borrowable)
+      qc.invalidateQueries({ queryKey: ["market"] });
+      // Offer book reads (liquidity, best-offers preview) — offers get filled by borrow
+      qc.invalidateQueries({ queryKey: ["offerBook"] });
+      qc.invalidateQueries({ queryKey: ["offers"] });
       toast.success("Borrow successful!");
     },
     onError: (e: Error) => {
@@ -263,6 +273,10 @@ export function useRepay() {
       qc.invalidateQueries({ queryKey: queryKeys.borrowers.detail("") });
       qc.invalidateQueries({ queryKey: queryKeys.positions.all() });
       qc.invalidateQueries({ queryKey: queryKeys.positions.portfolio });
+      qc.invalidateQueries({ queryKey: queryKeys.markets.all() });
+      // Risk score, health factor, and all on-chain market reads
+      qc.invalidateQueries({ queryKey: ["borrowers", "risk"] });
+      qc.invalidateQueries({ queryKey: ["market"] });
       toast.success("Repayment successful!");
     },
     onError: (e: Error) => {

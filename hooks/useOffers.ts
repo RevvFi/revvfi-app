@@ -122,6 +122,10 @@ export function useCreateOffer() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.offers.all() });
       qc.invalidateQueries({ queryKey: queryKeys.positions.portfolio });
+      // My-offers list (useMyOffers uses ['offers', 'byLender', ...])
+      qc.invalidateQueries({ queryKey: ["offers"] });
+      // Offer book reads (liquidity totals, active-offer count, best-offers preview)
+      qc.invalidateQueries({ queryKey: ["offerBook"] });
       toast.success("Offer submitted successfully");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -162,7 +166,10 @@ export function useCancelOffer() {
       return txHash;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.offers.all() });
+      // All offer queries (list, byMarket, byLender)
+      qc.invalidateQueries({ queryKey: ["offers"] });
+      // Offer book reads (liquidity totals, active-offer count)
+      qc.invalidateQueries({ queryKey: ["offerBook"] });
       toast.success("Offer cancelled successfully");
     },
     onError: (e: Error) => {

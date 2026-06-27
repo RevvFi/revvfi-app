@@ -8,6 +8,99 @@ import { auctionService } from "@/services/auction.service";
 import { queryKeys } from "@/constants/query-keys";
 import { LIQUIDATOR_ABI } from "@/lib/contracts/abis";
 import { CONTRACT_ADDRESSES } from "@/lib/contracts/addresses";
+import type { Auction } from "@/types";
+
+// Inline ABI fragments — only what useLiquidationStatus needs, avoids Abi cast issues
+const LIQUIDATION_STATUS_ABI = [
+  {
+    name: "isLiquidatable",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    name: "getCollateralRatio",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+] as const;
+
+// Check if a market is liquidatable and get its current health factor
+export function useLiquidationStatus(marketAddress?: string) {
+  const publicClient = usePublicClient();
+
+  return useQuery({
+    queryKey: ["liquidation-status", marketAddress],
+    queryFn: async () => {
+      if (!marketAddress || !publicClient) return null;
+      const addr = marketAddress as `0x${string}`;
+
+      const [isLiquidatable, collateralRatio] = await Promise.all([
+        publicClient.readContract({
+          address: addr,
+          abi: LIQUIDATION_STATUS_ABI,
+          functionName: "isLiquidatable",
+        }),
+        publicClient.readContract({
+          address: addr,
+          abi: LIQUIDATION_STATUS_ABI,
+          functionName: "getCollateralRatio",
+        }),
+      ]);
+
+      // collateralRatio is in basis points (e.g. 12000 = 120%)
+      // Divide by 10000 to get a ratio number (1.20 = healthy, <1.00 = liquidatable)
+      const healthFactor = Number(collateralRatio) / 10000;
+
+      return { isLiquidatable, healthFactor };
+    },
+    enabled: !!marketAddress && !!publicClient,
+    refetchInterval: 10_000,
+  });
+}
+
+// Fetch the active auction for a specific market (if any)
+export function useActiveAuction(marketAddress?: string) {
+  return useQuery({
+    queryKey: ["active-auction", marketAddress],
+    queryFn: async (): Promise<Auction | null> => {
+      if (!marketAddress) return null;
+      try {
+        const data = await auctionService.getAuctionsByMarket(marketAddress, "active");
+        return data.auctions?.[0] ?? null;
+      } catch {
+        return null; // graceful: if endpoint not deployed yet, show nothing
+      }
+    },
+    enabled: !!marketAddress,
+    refetchInterval: 5_000,
+  });
+}
+
+// Calculate the current Dutch auction discount as a 0-100 percentage
+// Re-runs every second to animate the progress bar
+export function useAuctionDiscount(auction: Auction | null | undefined): number {
+  const { data: discount } = useQuery({
+    queryKey: ["auction-discount", auction?.auction_id],
+    queryFn: () => {
+      if (!auction) return 0;
+      const now = Math.floor(Date.now() / 1000);
+      const duration = auction.end_time - auction.start_time;
+      if (duration <= 0) return 0;
+      const elapsed = now - auction.start_time;
+      if (elapsed <= 0) return 0;
+      if (elapsed >= duration) return 100;
+      return (elapsed / duration) * 100;
+    },
+    enabled: !!auction,
+    refetchInterval: 1_000,
+  });
+
+  return discount ?? 0;
+}
 export function useAuctions() {
   return useQuery({
     queryKey: queryKeys.auctions.liquidations(),

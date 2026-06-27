@@ -155,6 +155,7 @@ export function statusBg(status: string): string {
     partially_filled: "bg-amber-400/10 text-amber-400",
     warning: "bg-amber-400/10 text-amber-400",
     liquidating: "bg-orange-400/10 text-orange-400",
+    liquidatable: "bg-red-500/15 text-red-400",
     cancelled: "bg-red-400/10 text-red-400",
     defaulted: "bg-red-400/10 text-red-400",
     halted: "bg-red-400/10 text-red-400",

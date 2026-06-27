@@ -50,7 +50,7 @@ export function StatusBadge({
         "bg-emerald-400": ["active", "healthy", "confirmed", "success", "filled"].includes(status.toLowerCase()),
         "bg-amber-400": ["pending", "processing", "partially_filled", "warning"].includes(status.toLowerCase()),
         "bg-orange-400": ["liquidating"].includes(status.toLowerCase()),
-        "bg-red-400": ["cancelled", "defaulted", "error", "halted"].includes(status.toLowerCase()),
+        "bg-red-400": ["cancelled", "defaulted", "error", "halted", "liquidatable"].includes(status.toLowerCase()),
         "bg-gray-500": ["settled", "expired", "inactive"].includes(status.toLowerCase()),
       })} />
       {status.replace(/_/g, " ")}

@@ -37,17 +37,13 @@ const MARKET_ABI = [
 
 // Get collateral balance for a specific market
 export function useMarketCollateralBalance(marketAddress: Address | undefined, borrowerAddress: Address | undefined) {
-  // First get escrow address from market
   const { data: escrowAddress } = useReadContract({
     address: marketAddress,
     abi: MARKET_ABI,
     functionName: 'collateralEscrow',
-    query: {
-      enabled: !!marketAddress,
-    }
+    query: { enabled: !!marketAddress },
   });
 
-  // Then get collateral balance from escrow
   return useReadContract({
     address: escrowAddress as Address,
     abi: ESCROW_ABI,
@@ -55,20 +51,18 @@ export function useMarketCollateralBalance(marketAddress: Address | undefined, b
     args: borrowerAddress ? [borrowerAddress] : undefined,
     query: {
       enabled: !!escrowAddress && !!borrowerAddress,
-    }
+      refetchInterval: 15_000,
+    },
   });
 }
 
 // Get min collateral ratio
 export function useMinCollateralRatio(marketAddress: Address | undefined) {
-  // Get escrow address
   const { data: escrowAddress } = useReadContract({
     address: marketAddress,
     abi: MARKET_ABI,
     functionName: 'collateralEscrow',
-    query: {
-      enabled: !!marketAddress,
-    }
+    query: { enabled: !!marketAddress },
   });
 
   return useReadContract({
@@ -77,7 +71,8 @@ export function useMinCollateralRatio(marketAddress: Address | undefined) {
     functionName: 'minCollateralRatio',
     query: {
       enabled: !!escrowAddress,
-    }
+      refetchInterval: 60_000, // ratio rarely changes
+    },
   });
 }
 
@@ -89,7 +84,8 @@ export function useMarketTotalDebt(marketAddress: Address | undefined) {
     functionName: 'totalDebt',
     query: {
       enabled: !!marketAddress,
-    }
+      refetchInterval: 15_000,
+    },
   });
 }
 
@@ -105,9 +101,10 @@ export function useMarketTotalDebt(marketAddress: Address | undefined) {
 //   maxBorrow (6-decimal USDC) = 2e9 * 10000 / 11000     ≈ 1.818e9  ($1818)
 export function calculateMaxBorrow(
   collateralBalance: bigint,
-  collateralPrice: bigint,   // Chainlink-style: 8 decimal places (e.g. $2000 → 200_000_000_00)
+  collateralPrice: bigint,    // Chainlink-style: 8 decimal places (e.g. $2000 → 200_000_000_00)
   minCollateralRatio: bigint, // Basis points (e.g. 11000 = 110%)
-  currentDebt: bigint = BigInt(0) // In borrow-asset decimals (e.g. USDC 6-decimal)
+  currentDebt: bigint = BigInt(0), // In borrow-asset decimals (e.g. USDC 6-decimal)
+  availableLiquidity?: bigint  // Optional cap from offer-book; undefined = no cap
 ): bigint {
   if (collateralBalance === BigInt(0) || minCollateralRatio === BigInt(0)) {
     return BigInt(0);
@@ -119,9 +116,13 @@ export function calculateMaxBorrow(
   // Step 2 — convert to 6-decimal USDC (divide by 10^(8-6) = 100)
   const collateralValueUSDC = collateralValueIn8Dec / BigInt(100);
 
-  // Step 3 — apply min-collateral-ratio to get max borrow in USDC decimals
+  // Step 3 — apply min-collateral-ratio then subtract existing debt
   const maxBorrowBeforeDebt = (collateralValueUSDC * BigInt(10000)) / minCollateralRatio;
-
   const maxBorrow = maxBorrowBeforeDebt > currentDebt ? maxBorrowBeforeDebt - currentDebt : BigInt(0);
+
+  // Step 4 — cap by available offer-book liquidity when provided
+  if (availableLiquidity !== undefined) {
+    return maxBorrow < availableLiquidity ? maxBorrow : availableLiquidity;
+  }
   return maxBorrow;
 }

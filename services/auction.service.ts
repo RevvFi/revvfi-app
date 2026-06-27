@@ -13,4 +13,10 @@ export const auctionService = {
   async getAuctionPrice(id: number): Promise<AuctionPrice> {
     return get<AuctionPrice>(`/liquidations/auctions/${id}/price`);
   },
+
+  async getAuctionsByMarket(marketAddress: string, status?: string): Promise<{ auctions: Auction[] }> {
+    const params = new URLSearchParams({ market_address: marketAddress });
+    if (status) params.set("status", status);
+    return get<{ auctions: Auction[] }>(`/liquidations/auctions?${params.toString()}`);
+  },
 };

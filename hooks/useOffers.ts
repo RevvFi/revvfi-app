@@ -24,6 +24,19 @@ export function useOffers(params?: OffersParams) {
 }
 
 /**
+ * Get all offers created by a specific lender (across all markets).
+ * Used in Settings → My Offers to let lenders track and manage their positions.
+ */
+export function useMyOffers(lenderAddress: string | undefined) {
+  return useQuery({
+    queryKey: ["offers", "byLender", lenderAddress],
+    queryFn: () => offerService.getOffers({ lender: lenderAddress }),
+    enabled: !!lenderAddress,
+    refetchInterval: 15_000,
+  });
+}
+
+/**
  * Get all active offers for a specific market
  * Used by borrowers to see available liquidity
  */

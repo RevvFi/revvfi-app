@@ -86,7 +86,18 @@ export function useDepositCollateral() {
       qc.invalidateQueries({ queryKey: queryKeys.borrowers.detail("") });
       toast.success("Collateral deposited successfully");
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      console.error("Deposit collateral failed:", e);
+      if (e.message?.includes("User rejected")) {
+        toast.error("Transaction rejected by user");
+      } else if (e.message?.includes("allowance") || e.message?.includes("exceeds allowance")) {
+        toast.error("Token approval failed — please try again");
+      } else if (e.message?.includes("insufficient funds")) {
+        toast.error("Insufficient wallet balance for this deposit");
+      } else {
+        toast.error(e.message || "Collateral deposit failed");
+      }
+    },
   });
 }
 
@@ -121,7 +132,18 @@ export function useWithdrawCollateral() {
       qc.invalidateQueries({ queryKey: queryKeys.borrowers.detail("") });
       toast.success("Collateral withdrawn successfully");
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      console.error("Withdraw collateral failed:", e);
+      if (e.message?.includes("User rejected")) {
+        toast.error("Transaction rejected by user");
+      } else if (e.message?.includes("InsufficientCollateral") || e.message?.includes("ExceedsCollateral")) {
+        toast.error("Withdrawal exceeds available collateral");
+      } else if (e.message?.includes("WouldBeLiquidatable")) {
+        toast.error("Cannot withdraw — position would become liquidatable");
+      } else {
+        toast.error(e.message || "Collateral withdrawal failed");
+      }
+    },
   });
 }
 

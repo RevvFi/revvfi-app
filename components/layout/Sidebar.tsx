@@ -9,18 +9,19 @@ import { useAuthStore } from "@/store/auth.store";
 import {
   LayoutDashboard, TrendingUp, ArrowDownLeft, ArrowUpRight,
   Gavel, Briefcase, Award, BarChart3, Settings, Plus,
-  ShieldCheck, ChevronLeft, ChevronRight,
+  ShieldCheck, ChevronLeft, ChevronRight, AlertTriangle,
 } from "lucide-react";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/markets",   label: "Markets",   icon: TrendingUp },
-  { href: "/borrow",    label: "Borrow",    icon: ArrowDownLeft },
-  { href: "/lend",      label: "Lend",      icon: ArrowUpRight },
-  { href: "/portfolio", label: "Portfolio", icon: Briefcase },
-  { href: "/auctions",  label: "Auctions",  icon: Gavel },
-  { href: "/reputation",label: "Reputation",icon: Award },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/dashboard",   label: "Dashboard",    icon: LayoutDashboard },
+  { href: "/markets",     label: "Markets",      icon: TrendingUp },
+  { href: "/borrow",      label: "Borrow",       icon: ArrowDownLeft },
+  { href: "/lend",        label: "Lend",         icon: ArrowUpRight },
+  { href: "/portfolio",   label: "Portfolio",    icon: Briefcase },
+  { href: "/auctions",    label: "Auctions",     icon: Gavel },
+  { href: "/liquidation", label: "Liquidations", icon: AlertTriangle },
+  { href: "/reputation",  label: "Reputation",   icon: Award },
+  { href: "/analytics",   label: "Analytics",    icon: BarChart3 },
 ];
 
 export function Sidebar() {

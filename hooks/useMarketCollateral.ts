@@ -93,24 +93,35 @@ export function useMarketTotalDebt(marketAddress: Address | undefined) {
   });
 }
 
-// Calculate max borrow amount
+// Calculate max borrow amount.
+// Returns a value in the borrow asset's native units (e.g. USDC with 6 decimals).
+//
+// Unit walk-through (1 WETH @ $2000, minRatio = 110%, no existing debt):
+//   collateralBalance = 1e18  (18-decimal WETH)
+//   collateralPrice   = 2000 * 1e8 = 2e11  (8-decimal Chainlink price)
+//
+//   collateralValue (8-decimal USD) = 1e18 * 2e11 / 1e18 = 2e11
+//   collateralValue (6-decimal USDC) = 2e11 / 100        = 2e9  ($2000)
+//   maxBorrow (6-decimal USDC) = 2e9 * 10000 / 11000     ≈ 1.818e9  ($1818)
 export function calculateMaxBorrow(
   collateralBalance: bigint,
-  collateralPrice: bigint, // Price in USD with 8 decimals (e.g., $2000 = 200000000000)
-  minCollateralRatio: bigint, // In basis points (e.g., 11000 = 110%)
-  currentDebt: bigint = BigInt(0)
+  collateralPrice: bigint,   // Chainlink-style: 8 decimal places (e.g. $2000 → 200_000_000_00)
+  minCollateralRatio: bigint, // Basis points (e.g. 11000 = 110%)
+  currentDebt: bigint = BigInt(0) // In borrow-asset decimals (e.g. USDC 6-decimal)
 ): bigint {
   if (collateralBalance === BigInt(0) || minCollateralRatio === BigInt(0)) {
     return BigInt(0);
   }
 
-  // collateralValue = collateralBalance * collateralPrice / 1e18 (assuming 18 decimals for collateral)
-  // maxBorrow = (collateralValue * 10000) / minCollateralRatio - currentDebt
-  // Example: $2000 collateral, 110% ratio = can borrow up to $1818
+  // Step 1 — collateral value in 8-decimal USD
+  const collateralValueIn8Dec = (collateralBalance * collateralPrice) / BigInt(1e18);
 
-  const collateralValueUSD = (collateralBalance * collateralPrice) / BigInt(Math.floor(1e18));
-  const maxBorrowBeforeDebt = (collateralValueUSD * BigInt(10000)) / minCollateralRatio;
+  // Step 2 — convert to 6-decimal USDC (divide by 10^(8-6) = 100)
+  const collateralValueUSDC = collateralValueIn8Dec / BigInt(100);
+
+  // Step 3 — apply min-collateral-ratio to get max borrow in USDC decimals
+  const maxBorrowBeforeDebt = (collateralValueUSDC * BigInt(10000)) / minCollateralRatio;
+
   const maxBorrow = maxBorrowBeforeDebt > currentDebt ? maxBorrowBeforeDebt - currentDebt : BigInt(0);
-
   return maxBorrow;
 }

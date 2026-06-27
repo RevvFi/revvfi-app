@@ -75,8 +75,15 @@ function BorrowContent() {
   const [depositAmount, setDepositAmount] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
 
-  const healthFactor = risk?.health_factor ?? 0;
-  const hfColor = healthFactor > 2 ? "text-emerald-400" : healthFactor > 1.3 ? "text-amber-400" : "text-red-400";
+  // Prefer on-chain ratio when a market is selected (avoids stale/wrong backend value).
+  // collateralRatio and minCollateralRatio are both in bps (e.g. 20600, 11000).
+  // healthFactor = collateralRatio / minCollateralRatio  →  20600 / 11000 = 1.87
+  const onChainHealthFactor =
+    marketHealth.collateralRatio && minCollateralRatio && Number(minCollateralRatio) > 0
+      ? Number(marketHealth.collateralRatio) / Number(minCollateralRatio)
+      : null;
+  const healthFactor = onChainHealthFactor ?? (risk?.health_factor ?? 0);
+  const hfColor = healthFactor > 1.5 ? "text-emerald-400" : healthFactor > 1.2 ? "text-amber-400" : "text-red-400";
 
   const selectedMarketData = markets?.markets.find((m) => m.address === selectedMarket);
 
@@ -162,17 +169,23 @@ function BorrowContent() {
       return;
     }
 
-    // NEW: Pre-flight validation
-    const borrowAmountNum = parseFloat(borrowAmount);
-    const maxBorrowNum = parseFloat(maxBorrowFormatted);
-
-    if (borrowAmountNum > maxBorrowNum) {
-      toast.error(`Cannot borrow more than ${maxBorrowFormatted} ${selectedMarketData.borrow_asset.symbol}. Deposit more collateral.`);
+    // Block a second borrow when debt already exists in this market.
+    // The contract creates new positions; it cannot top-up an existing loan.
+    if (totalDebt && totalDebt > BigInt(0)) {
+      toast.error("You already have active debt in this market. Repay it first or create a new market.");
       return;
     }
 
     if (!marketCollateral || marketCollateral === BigInt(0)) {
       toast.error("Please deposit collateral first before borrowing");
+      return;
+    }
+
+    const borrowAmountNum = parseFloat(borrowAmount);
+    const maxBorrowNum = parseFloat(maxBorrowFormatted);
+
+    if (borrowAmountNum > maxBorrowNum) {
+      toast.error(`Cannot borrow more than ${maxBorrowFormatted} ${selectedMarketData.borrow_asset.symbol}. Deposit more collateral.`);
       return;
     }
 
@@ -658,6 +671,20 @@ function BorrowContent() {
             <TrendingUp className="h-4 w-4 text-primary" />
           </div>
 
+          {/* Existing-debt warning */}
+          {totalDebt && totalDebt > BigInt(0) && (
+            <div className="p-3 rounded bg-red-400/10 border border-red-400/30">
+              <p className="text-xs text-red-400 font-semibold">
+                ⚠️ Active loan detected
+              </p>
+              <p className="text-xs text-on-surface-variant mt-1">
+                You already have {formatUnits(totalDebt, selectedMarketData?.borrow_asset.decimals || 6)}{" "}
+                {selectedMarketData?.borrow_asset.symbol ?? "USDC"} outstanding in this market.
+                Repay your existing debt first, or create a new market to borrow more.
+              </p>
+            </div>
+          )}
+
           {/* MAX BORROW AMOUNT */}
           {selectedMarket && marketCollateral && marketCollateral > BigInt(0) && (
             <div className="p-3 rounded bg-primary/10 border border-primary/30">
@@ -744,12 +771,15 @@ function BorrowContent() {
               !selectedMarket ||
               !isMarketBorrower ||
               !borrowAmount ||
+              !!(totalDebt && totalDebt > BigInt(0)) ||
               (borrowPreview && borrowPreview.totalAvailable < BigInt(parseFloat(borrowAmount) * Math.pow(10, selectedMarketData?.borrow_asset.decimals || 6))) ||
               (borrowPreview && borrowPreview.weightedApr > BigInt(maxAPR))
             }
           >
             {!isMarketBorrower && selectedMarket
               ? "Not Authorized"
+              : totalDebt && totalDebt > BigInt(0)
+              ? "Repay Existing Debt First"
               : borrowPreview && borrowPreview.totalAvailable < BigInt(parseFloat(borrowAmount || "0") * Math.pow(10, selectedMarketData?.borrow_asset.decimals || 6))
               ? "Insufficient Liquidity"
               : borrowPreview && borrowPreview.weightedApr > BigInt(maxAPR)

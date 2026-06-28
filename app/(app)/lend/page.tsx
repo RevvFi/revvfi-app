@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useAccount } from "wagmi";
 import { useOffers, useCreateOffer, useCancelOffer } from "@/hooks/useOffers";
-import { usePortfolio, useClaimPosition } from "@/hooks/usePositions";
+import { usePortfolio } from "@/hooks/usePositions";
 import { useMarkets } from "@/hooks/useMarkets";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, EmptySta
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatAddress, formatAPR } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth.store";
-import { Info, Zap, TrendingUp } from "lucide-react";
+import { Info, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { MarketSelector } from "@/components/MarketSelector";
 
@@ -25,7 +25,6 @@ export default function LendPage() {
   const { data: markets } = useMarkets({ is_active: true });
   const createOffer = useCreateOffer();
   const cancelOffer = useCancelOffer();
-  const claimPosition = useClaimPosition();
 
   const [form, setForm] = useState({
     market_address: "",
@@ -100,18 +99,6 @@ export default function LendPage() {
         </Card>
       </div>
 
-      {/* Info banner for lenders */}
-      <Card className="p-4 border-blue-400/20 bg-blue-400/5">
-        <div className="flex items-center gap-3">
-          <TrendingUp className="h-5 w-5 text-blue-400 shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-on-surface">Open Market Lending</p>
-            <p className="text-xs text-on-surface-variant mt-0.5">
-              Any lender can create offers for any market. Choose your target market, set your APR, and provide liquidity.
-            </p>
-          </div>
-        </div>
-      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* New Offer Form */}

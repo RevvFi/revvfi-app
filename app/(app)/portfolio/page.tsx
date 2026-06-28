@@ -1,19 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useAccount } from "wagmi";
-import { usePositions, usePortfolio, useClaimPosition, useWithdrawals, useCreateWithdrawal, useCancelWithdrawal, useClaimWithdrawal } from "@/hooks/usePositions";
+import { usePositions, useClaimPosition, useWithdrawals, useCancelWithdrawal, useClaimWithdrawal } from "@/hooks/usePositions";
 import { useOffers, useCancelOffer } from "@/hooks/useOffers";
 import { useCompletePortfolio } from "@/hooks/usePortfolioData";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, EmptyState } from "@/components/ui/table";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, EmptyState as TableEmptyState } from "@/components/ui/table";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatAddress, formatAPR, formatTimestamp, formatRelativeTime } from "@/lib/utils";
-import { Download, Settings, CheckCircle2, TrendingUp, TrendingDown, DollarSign, Users, BarChart3, Activity, Copy, Check } from "lucide-react";
-import { useAuthStore } from "@/store/auth.store";
+import { formatAddress, formatAPR, formatRelativeTime } from "@/lib/utils";
+import { Download, Settings, CheckCircle2, TrendingUp, TrendingDown, DollarSign, Users, BarChart3, Activity, Copy, Check, Wallet } from "lucide-react";
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
 
 // ── Token dot — colored initial circle ───────────────────────────────────────
 const TOKEN_COLORS: Record<string, string> = {
@@ -71,10 +73,11 @@ function fmtUSD(raw: string, decimals = 6): string {
   return `$${n.toFixed(2)}`;
 }
 
+const ALLOC_COLORS = ["#FF6A00", "#60a5fa", "#34d399", "#a78bfa", "#fb923c"];
+
 export default function PortfolioPage() {
+  const router = useRouter();
   const { address } = useAccount();
-  const { isAuthenticated } = useAuthStore();
-  const { data: portfolio, isLoading: portfolioLoading } = usePortfolio();
   const { data: positions, isLoading: positionsLoading } = usePositions();
   const { data: offers, isLoading: offersLoading } = useOffers();
   const { data: withdrawals, isLoading: withdrawalsLoading } = useWithdrawals();
@@ -82,12 +85,22 @@ export default function PortfolioPage() {
   const cancelOffer = useCancelOffer();
   const cancelWithdrawal = useCancelWithdrawal();
   const claimWithdrawal = useClaimWithdrawal();
-  const createWithdrawal = useCreateWithdrawal();
 
   // NEW: Complete portfolio data
   const completePortfolio = useCompletePortfolio(address);
   const borrowerData = completePortfolio.borrower;
   const lenderData = completePortfolio.lender;
+
+  // Build allocation from positions — group by market/asset
+  const allocationData = useMemo(() => {
+    if (!positions?.positions || positions.positions.length === 0) return [];
+    const total = positions.positions.reduce((sum, p) => sum + parseFloat(p.principal || "0"), 0);
+    if (total === 0) return [];
+    return positions.positions.slice(0, 5).map((p) => ({
+      name: p.market_address ? `${p.market_address.slice(0, 6)}…` : "Market",
+      value: (parseFloat(p.principal || "0") / total) * 100,
+    }));
+  }, [positions]);
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-350 mx-auto">
@@ -189,6 +202,55 @@ export default function PortfolioPage() {
           </>
         )}
       </div>
+
+      {/* Allocation Breakdown */}
+      {positions && positions.positions.length > 0 && (
+        <Card className="p-5">
+          <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant mb-4">Allocation</p>
+          <div className="flex flex-col sm:flex-row items-center gap-6">
+            <div className="shrink-0">
+              <ResponsiveContainer width={160} height={160}>
+                <PieChart>
+                  <Pie
+                    data={allocationData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={75}
+                    paddingAngle={3}
+                    dataKey="value"
+                    strokeWidth={0}
+                  >
+                    {allocationData.map((_, i) => (
+                      <Cell key={i} fill={ALLOC_COLORS[i % ALLOC_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      return (
+                        <div className="rounded-lg border border-outline-variant/20 bg-surface-container-high px-3 py-2 shadow-lg text-xs">
+                          <p className="text-on-surface font-bold">{payload[0].name}</p>
+                          <p className="text-on-surface-variant">{(payload[0].value as number)?.toFixed(1)}%</p>
+                        </div>
+                      );
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex-1 space-y-2 w-full">
+              {allocationData.map((item, i) => (
+                <div key={item.name} className="flex items-center gap-3">
+                  <span className="h-2 w-2 rounded-full shrink-0" style={{ background: ALLOC_COLORS[i % ALLOC_COLORS.length] }} />
+                  <span className="text-sm text-on-surface flex-1">{item.name}</span>
+                  <span className="text-sm font-bold mono text-on-surface">{item.value.toFixed(1)}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Tabs */}
       <Card className="p-0 overflow-hidden">
@@ -389,7 +451,7 @@ export default function PortfolioPage() {
                 })}
               </div>
             ) : (
-              <EmptyState
+              <TableEmptyState
                 title="No markets as borrower"
                 description="You haven't created any markets yet. Create a market to start borrowing."
               />
@@ -440,7 +502,17 @@ export default function PortfolioPage() {
                     </TableRow>
                   ))
                 ) : (
-                  <TableRow><TableCell colSpan={9}><EmptyState title="No positions yet" description="Supply liquidity through the Lend portal to get started" /></TableCell></TableRow>
+                  <TableRow>
+                    <TableCell colSpan={9}>
+                      <EmptyState
+                        icon={Wallet}
+                        title="No Positions Yet"
+                        description="Start lending to earn interest. Submit an offer on any market to get started."
+                        action={() => router.push("/markets")}
+                        actionLabel="Explore Markets"
+                      />
+                    </TableCell>
+                  </TableRow>
                 )}
               </TableBody>
             </Table>
@@ -479,7 +551,11 @@ export default function PortfolioPage() {
                       <TableCell className="text-right"><span className="text-primary">{formatAPR(o.apr)}</span></TableCell>
                       <TableCell><span className="text-xs">{o.seniority === 0 ? "Senior" : "Junior"}</span></TableCell>
                       <TableCell><StatusBadge status={o.status} /></TableCell>
-                      <TableCell className="text-xs text-on-surface-variant">{formatTimestamp(o.expiry)}</TableCell>
+                      <TableCell>
+                        <time title={new Date(o.expiry * 1000).toLocaleString()} className="text-xs text-on-surface-variant">
+                          {formatRelativeTime(o.expiry)}
+                        </time>
+                      </TableCell>
                       <TableCell>
                         {o.status === "active" && (
                           <Button size="sm" variant="ghost" className="text-xs text-red-400"
@@ -491,7 +567,7 @@ export default function PortfolioPage() {
                     </TableRow>
                   ))
                 ) : (
-                  <TableRow><TableCell colSpan={9}><EmptyState title="No offers" description="Create offers through the Lend portal" /></TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9}><TableEmptyState title="No offers" description="Create offers through the Lend portal" /></TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
@@ -539,7 +615,11 @@ export default function PortfolioPage() {
                       <TableCell className="text-xs text-on-surface-variant">
                         {w.epoch_number !== undefined ? `Epoch #${w.epoch_number}` : '—'}
                       </TableCell>
-                      <TableCell className="text-xs text-on-surface-variant">{formatTimestamp(w.requested_at)}</TableCell>
+                      <TableCell>
+                        <time title={new Date(w.requested_at * 1000).toLocaleString()} className="text-xs text-on-surface-variant">
+                          {formatRelativeTime(w.requested_at)}
+                        </time>
+                      </TableCell>
                       <TableCell>
                         {w.status === "pending" && (
                           <Button size="sm" variant="ghost" className="text-xs text-red-400"
@@ -560,7 +640,7 @@ export default function PortfolioPage() {
                     </TableRow>
                   ))
                 ) : (
-                  <TableRow><TableCell colSpan={8}><EmptyState title="No withdrawal requests" description="Request withdrawals from your positions" /></TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8}><TableEmptyState title="No withdrawal requests" description="Request withdrawals from your positions" /></TableCell></TableRow>
                 )}
               </TableBody>
             </Table>

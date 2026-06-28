@@ -6,7 +6,7 @@ import { useDutchAuctionPrice } from "@/hooks/useLiquidation";
 import { useAccount } from "wagmi";
 import { AuctionCard } from "./_components/AuctionCard";
 import { BidHistoryCard } from "./_components/BidHistoryCard";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert } from "@/components/ui/alert";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { formatAddress, formatCountdown, fmtUSD } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
 import { Filter, History, Zap, ShieldCheck, Gavel, TrendingDown, Activity, Trophy, Award, CheckCircle, Loader2 } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { formatUnits } from "viem";
 import type { Auction } from "@/types";
 
@@ -296,15 +297,11 @@ export default function AuctionsPage() {
         </div>
       ) : !hasAuctions ? (
         <div className="flex flex-col items-center justify-center py-28 rounded-xl border border-outline-variant/20 bg-surface-container/30 text-center gap-4">
-          <div className="h-16 w-16 rounded-full bg-surface-container flex items-center justify-center">
-            <Zap className="h-8 w-8 text-on-surface-variant/30" />
-          </div>
-          <div>
-            <p className="text-base font-semibold text-on-surface">No Active Auctions</p>
-            <p className="text-sm text-on-surface-variant mt-1 max-w-sm">
-              Liquidation auctions appear here when collateral health drops below the liquidation threshold.
-            </p>
-          </div>
+          <EmptyState
+            icon={Zap}
+            title="No Active Auctions"
+            description="Liquidation auctions appear here when collateral health drops below the liquidation threshold."
+          />
           <div className="mt-4 w-full max-w-xs text-left rounded-lg border border-outline-variant/20 bg-surface-container p-4">
             <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant mb-3">
               Auction Protections

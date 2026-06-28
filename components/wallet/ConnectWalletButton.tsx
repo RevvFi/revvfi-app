@@ -1,27 +1,25 @@
 "use client";
 
 import { useAccount, useConnect, useDisconnect } from "wagmi";
-import { injected, coinbaseWallet, walletConnect } from "wagmi/connectors";
 import { useState } from "react";
 import { Wallet, ChevronDown, LogOut, Copy, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useAuthStore } from "@/store/auth.store";
 import { useSIWE } from "@/hooks/useAuth";
-import { formatAddress } from "@/lib/utils";
-import { WALLETCONNECT_PROJECT_ID } from "@/constants/chains";
-import { cn } from "@/lib/utils";
-
-type Tab = "connect" | "account";
+import { usePortfolio } from "@/hooks/usePositions";
+import { formatAddress, fmtUSD } from "@/lib/utils";
 
 export function ConnectWalletButton() {
   const { address, isConnected } = useAccount();
   const { connect, connectors, isPending } = useConnect();
   const { disconnect } = useDisconnect();
-  const { isAuthenticated, logout: storeLogout } = useAuthStore();
-  const { login, logout, isSigningIn, isSigningOut } = useSIWE();
+  const { isAuthenticated } = useAuthStore();
+  const { login, logout } = useSIWE();
   const [open, setOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const { data: portfolio } = usePortfolio();
 
   function handleCopy() {
     if (address) {
@@ -47,74 +45,83 @@ export function ConnectWalletButton() {
 
   if (isConnected && address) {
     return (
-      <>
+      <div className="relative">
         <button
-          onClick={() => setOpen(true)}
-          className="flex items-center gap-2 rounded-lg border border-outline-variant/40 bg-surface-container px-3 py-2 text-sm text-on-surface hover:bg-surface-container-high transition-colors"
+          onClick={() => setDropdownOpen((o) => !o)}
+          className="flex items-center gap-2 h-8 px-3 rounded border border-[#1A1A1A] hover:border-[#2D2D2D] transition-colors text-[12px] text-[#E6E6E6] bg-[#0A0A0A]"
         >
-          <span className="h-2 w-2 rounded-full bg-emerald-400" />
-          <span className="mono text-xs hidden sm:block">{formatAddress(address)}</span>
-          <ChevronDown className="h-3.5 w-3.5 text-on-surface-variant" />
+          <div className="h-5 w-5 rounded-full bg-gradient-to-br from-[#FF6A00] to-[#FF6A00]/40 shrink-0" />
+          <span className="font-mono hidden sm:block">{formatAddress(address)}</span>
+          <ChevronDown className="h-3 w-3 text-[#9CA3AF]" />
         </button>
 
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent title="Connected Account" className="max-w-sm">
-            <div className="p-6 pt-4 space-y-5">
-              <div className="flex items-center gap-3 rounded-lg bg-surface-container-low p-4">
-                <div className="h-10 w-10 rounded-full bg-primary-container/20 flex items-center justify-center">
-                  <Wallet className="h-5 w-5 text-primary" />
+        {dropdownOpen && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setDropdownOpen(false)} />
+            <div className="absolute right-0 top-full mt-1.5 w-56 z-50 rounded-lg border border-[#1A1A1A] bg-[#111111] shadow-2xl overflow-hidden">
+              {/* Header */}
+              <div className="p-3 border-b border-[#1A1A1A]">
+                <div className="flex items-center gap-2.5 mb-2">
+                  <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#FF6A00] to-[#FF6A00]/40 shrink-0" />
+                  <div>
+                    <p className="text-[12px] font-mono text-[#E6E6E6]">{formatAddress(address)}</p>
+                    <p className="text-[10px] text-[#9CA3AF]">Ethereum</p>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-on-surface-variant mb-0.5">Connected Wallet</p>
-                  <p className="text-sm font-mono text-on-surface truncate">{address}</p>
-                </div>
-              </div>
-
-              {!isAuthenticated && (
-                <div className="rounded-lg border border-amber-400/20 bg-amber-400/5 p-3">
-                  <p className="text-xs text-amber-400">
-                    Sign a message to authenticate with RevvFi
-                  </p>
-                </div>
-              )}
-
-              <div className="flex flex-col gap-2">
-                {!isAuthenticated ? (
-                  <Button
-                    onClick={handleSignIn}
-                    loading={isSigningIn}
-                    className="w-full"
-                  >
-                    Sign In with Ethereum
-                  </Button>
-                ) : (
-                  <div className="flex items-center gap-1.5 rounded-lg bg-emerald-400/10 px-3 py-2">
-                    <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                    <span className="text-xs text-emerald-400 font-medium">Authenticated</span>
+                {portfolio && (
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-[#9CA3AF]">Portfolio</span>
+                      <span className="font-semibold text-[#E6E6E6] mono">{fmtUSD(portfolio.total_value)}</span>
+                    </div>
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-[#9CA3AF]">Positions</span>
+                      <span className="font-semibold text-[#E6E6E6]">{portfolio.active_positions}</span>
+                    </div>
                   </div>
                 )}
-
-                <div className="flex gap-2">
-                  <Button variant="secondary" size="sm" onClick={handleCopy} className="flex-1 gap-1.5">
-                    <Copy className="h-3.5 w-3.5" />
-                    Copy
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleDisconnect}
-                    loading={isSigningOut}
-                    className="flex-1 gap-1.5"
-                  >
-                    <LogOut className="h-3.5 w-3.5" />
-                    Disconnect
-                  </Button>
-                </div>
+                {!isAuthenticated && (
+                  <div className="mt-2">
+                    <button
+                      className="w-full text-[11px] text-amber-400 hover:text-amber-300 transition-colors text-left"
+                      onClick={() => { setDropdownOpen(false); handleSignIn(); }}
+                    >
+                      Sign in with Ethereum →
+                    </button>
+                  </div>
+                )}
+              </div>
+              {/* Actions */}
+              <div className="p-1">
+                <button
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded text-[12px] text-[#9CA3AF] hover:text-[#E6E6E6] hover:bg-white/5 transition-colors"
+                  onClick={() => { setDropdownOpen(false); window.location.href = "/portfolio"; }}
+                >
+                  <Wallet className="h-3.5 w-3.5" /> Portfolio
+                </button>
+                <button
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded text-[12px] text-[#9CA3AF] hover:text-[#E6E6E6] hover:bg-white/5 transition-colors"
+                  onClick={() => { setDropdownOpen(false); window.location.href = "/settings"; }}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" /> Settings
+                </button>
+                <button
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded text-[12px] text-[#9CA3AF] hover:text-[#E6E6E6] hover:bg-white/5 transition-colors"
+                  onClick={() => { setDropdownOpen(false); handleCopy(); }}
+                >
+                  <Copy className="h-3.5 w-3.5" /> Copy Address
+                </button>
+                <button
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded text-[12px] text-red-400 hover:text-red-300 hover:bg-red-400/5 transition-colors"
+                  onClick={() => { setDropdownOpen(false); handleDisconnect(); }}
+                >
+                  <LogOut className="h-3.5 w-3.5" /> Disconnect
+                </button>
               </div>
             </div>
-          </DialogContent>
-        </Dialog>
-      </>
+          </>
+        )}
+      </div>
     );
   }
 

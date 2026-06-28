@@ -83,10 +83,11 @@ export function useDepositCollateral() {
       await publicClient!.waitForTransactionReceipt({ hash: depositTx });
       return depositTx;
     },
-    onSuccess: () => {
+    onSuccess: (txHash) => {
       // Borrower record + all on-chain market-health reads (collateral ratio, totalAssets, etc.)
       qc.invalidateQueries({ queryKey: queryKeys.borrowers.detail("") });
       qc.invalidateQueries({ queryKey: ["market"] });
+      toast.success(`Collateral deposited · ${txHash.slice(0, 10)}…`);
     },
     onError: (e: Error) => {
       console.error("Deposit collateral failed:", e);
@@ -130,10 +131,10 @@ export function useWithdrawCollateral() {
       await publicClient!.waitForTransactionReceipt({ hash: txHash });
       return txHash;
     },
-    onSuccess: () => {
+    onSuccess: (txHash) => {
       qc.invalidateQueries({ queryKey: queryKeys.borrowers.detail("") });
       qc.invalidateQueries({ queryKey: ["market"] });
-      toast.success("Collateral withdrawn successfully");
+      toast.success(`Collateral withdrawn · ${txHash.slice(0, 10)}…`);
     },
     onError: (e: Error) => {
       console.error("Withdraw collateral failed:", e);
@@ -197,7 +198,7 @@ export function useBorrow() {
 
       return txHash;
     },
-    onSuccess: () => {
+    onSuccess: (txHash) => {
       qc.invalidateQueries({ queryKey: queryKeys.positions.all() });
       qc.invalidateQueries({ queryKey: queryKeys.positions.portfolio });
       qc.invalidateQueries({ queryKey: queryKeys.markets.all() });
@@ -209,7 +210,7 @@ export function useBorrow() {
       // Offer book reads (liquidity, best-offers preview) — offers get filled by borrow
       qc.invalidateQueries({ queryKey: ["offerBook"] });
       qc.invalidateQueries({ queryKey: ["offers"] });
-      toast.success("Borrow successful!");
+      toast.success(`Borrow confirmed · ${txHash.slice(0, 10)}…`);
     },
     onError: (e: Error) => {
       console.error("Borrow failed:", e);
@@ -269,7 +270,7 @@ export function useRepay() {
 
       return repayTx;
     },
-    onSuccess: () => {
+    onSuccess: (txHash) => {
       qc.invalidateQueries({ queryKey: queryKeys.borrowers.detail("") });
       qc.invalidateQueries({ queryKey: queryKeys.positions.all() });
       qc.invalidateQueries({ queryKey: queryKeys.positions.portfolio });
@@ -277,7 +278,7 @@ export function useRepay() {
       // Risk score, health factor, and all on-chain market reads
       qc.invalidateQueries({ queryKey: ["borrowers", "risk"] });
       qc.invalidateQueries({ queryKey: ["market"] });
-      toast.success("Repayment successful!");
+      toast.success(`Repayment confirmed · ${txHash.slice(0, 10)}…`);
     },
     onError: (e: Error) => {
       console.error("Repay failed:", e);

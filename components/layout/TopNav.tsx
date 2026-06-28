@@ -6,7 +6,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { ConnectWalletButton } from "@/components/wallet/ConnectWalletButton";
-import { Settings, Menu, X } from "lucide-react";
+import { Settings, Menu, X, Search } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
 
 const NAV_ITEMS = [
@@ -36,6 +36,11 @@ export function TopNav() {
   const { user } = useAuthStore();
   const isAdmin = user?.role === "admin";
   const [mobileOpen, setMobileOpen] = useState(false);
+  function openSearch() {
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "k", metaKey: true, ctrlKey: true, bubbles: true })
+    );
+  }
 
   function isActive(href: string) {
     return pathname === href || pathname.startsWith(href + "/");
@@ -82,6 +87,17 @@ export function TopNav() {
 
         {/* Right side */}
         <div className="flex items-center gap-1 px-3 ml-auto border-l border-[#1A1A1A] shrink-0">
+          {/* ⌘K search trigger — desktop only */}
+          <button
+            onClick={openSearch}
+            className="hidden lg:flex items-center gap-2 h-7 px-2.5 rounded border border-[#1A1A1A] text-[11px] text-[#9CA3AF] hover:text-[#E6E6E6] hover:border-[#2D2D2D] transition-colors mr-1 select-none"
+            title="Search (⌘K)"
+          >
+            <Search className="h-3 w-3" />
+            <span>Search</span>
+            <kbd className="rounded bg-[#1A1A1A] px-1 py-0.5 text-[10px]">⌘K</kbd>
+          </button>
+
           {/* Network pill — large screens only */}
           <div className="hidden lg:flex items-center gap-1.5 px-2.5 h-7 rounded border border-[#1A1A1A] text-[11px] font-medium text-[#9CA3AF] select-none mr-1">
             {/* eslint-disable-next-line @next/next/no-img-element */}

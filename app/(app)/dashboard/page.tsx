@@ -5,12 +5,15 @@ import { usePortfolio, usePositions } from "@/hooks/usePositions";
 import { useMarkets } from "@/hooks/useMarkets";
 import { useLiquidations } from "@/hooks/useAuctions";
 import { useBorrower, useBorrowerRisk } from "@/hooks/useBorrower";
-import { Card, MetricCard } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
+import { CountUp } from "@/components/ui/count-up";
 import { StatusBadge } from "@/components/ui/badge";
 import { Skeleton, SkeletonCard } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { HealthFactorRing } from "@/components/HealthFactorRing";
 import { TokenPair } from "@/components/TokenIcon";
+import { Sparkline } from "@/components/ui/sparkline";
+import { CopyButton } from "@/components/ui/copy-button";
 import { formatAddress, formatAPR, fmtUSD, reputationColor } from "@/lib/utils";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -24,6 +27,11 @@ const MOCK_PERF = [
   { day: "Wed", value: 1210000 }, { day: "Thu", value: 1280000 },
   { day: "Fri", value: 1350000 }, { day: "Sat", value: 1320000 },
   { day: "Sun", value: 1284592 },
+];
+
+const MOCK_SPARKLINE = [
+  { value: 100 }, { value: 120 }, { value: 110 }, { value: 140 },
+  { value: 130 }, { value: 160 }, { value: 155 },
 ];
 
 export default function DashboardPage() {
@@ -74,6 +82,10 @@ export default function DashboardPage() {
               <div>
                 <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Health Factor</p>
                 <p className="text-[10px] text-on-surface-variant mt-0.5">Liquidation threshold: 1.10</p>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className="text-xs mono text-on-surface-variant">{formatAddress(address ?? "")}</span>
+                  <CopyButton text={address ?? ""} label="Wallet address" />
+                </div>
               </div>
             </div>
 
@@ -117,25 +129,51 @@ export default function DashboardPage() {
           Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} rows={1} />)
         ) : (
           <>
-            <MetricCard
-              label="Total Value"
-              value={fmtUSD(totalValue)}
-              sub="Across all positions"
-            />
-            <MetricCard
-              label="Active Positions"
-              value={activePositions > 0 ? activePositions : "—"}
-              sub={portfolio?.settled_positions ? `${portfolio.settled_positions} settled` : undefined}
-            />
-            <MetricCard
-              label="Avg. APR"
-              value={avgAPR > 0 ? formatAPR(avgAPR) : "—"}
-            />
-            <MetricCard
-              label="Earned Interest"
-              value={fmtUSD(earnedInterest)}
-              sub="Accrued to date"
-            />
+            <div className="rounded-md border border-outline-variant/20 bg-surface-container p-4 hover:bg-surface-container-high transition-colors">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">Total Value</p>
+              <div className="text-xl font-semibold text-on-surface mono">
+                <CountUp
+                  end={parseFloat(totalValue) / 1e6}
+                  duration={1.2}
+                  prefix="$"
+                  suffix="M"
+                  decimals={2}
+                />
+              </div>
+              <Sparkline data={MOCK_SPARKLINE} color="#FF6A00" className="h-8 mt-2" />
+              <p className="text-xs text-on-surface-variant mt-1.5">Across all positions</p>
+            </div>
+            <div className="rounded-md border border-outline-variant/20 bg-surface-container p-4 hover:bg-surface-container-high transition-colors">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">Active Positions</p>
+              <div className="text-xl font-semibold text-on-surface mono">
+                <CountUp end={activePositions} duration={1.0} decimals={0} />
+              </div>
+              <Sparkline data={MOCK_SPARKLINE} color="#FF6A00" className="h-8 mt-2" />
+              {portfolio?.settled_positions ? (
+                <p className="text-xs text-on-surface-variant mt-1.5">{portfolio.settled_positions} settled</p>
+              ) : null}
+            </div>
+            <div className="rounded-md border border-outline-variant/20 bg-surface-container p-4 hover:bg-surface-container-high transition-colors">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">Avg. APR</p>
+              <div className="text-xl font-semibold text-on-surface mono">
+                <CountUp end={avgAPR / 100} duration={1.2} suffix="%" decimals={2} />
+              </div>
+              <Sparkline data={MOCK_SPARKLINE} color="#FF6A00" className="h-8 mt-2" />
+            </div>
+            <div className="rounded-md border border-outline-variant/20 bg-surface-container p-4 hover:bg-surface-container-high transition-colors">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">Earned Interest</p>
+              <div className="text-xl font-semibold text-on-surface mono">
+                <CountUp
+                  end={parseFloat(earnedInterest || "0") / 1e6}
+                  duration={1.2}
+                  prefix="$"
+                  suffix="M"
+                  decimals={4}
+                />
+              </div>
+              <Sparkline data={MOCK_SPARKLINE} color="#FF6A00" className="h-8 mt-2" />
+              <p className="text-xs text-on-surface-variant mt-1.5">Accrued to date</p>
+            </div>
           </>
         )}
       </div>
@@ -163,22 +201,29 @@ export default function DashboardPage() {
               ))}
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={200}>
+          <ResponsiveContainer width="100%" height={280}>
             <AreaChart data={MOCK_PERF} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
               <defs>
-                <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#ff5a1f" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#ff5a1f" stopOpacity={0} />
+                <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#FF6A00" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="#FF6A00" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="day" tick={{ fill: "#e4beb3", fontSize: 11 }} axisLine={false} tickLine={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+              <XAxis dataKey="day" tick={{ fill: "#9CA3AF", fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis hide />
               <Tooltip
-                contentStyle={{ background: "#2c1c17", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, color: "#fadcd4" }}
-                formatter={(v: number) => [`$${(v / 1e6).toFixed(3)}M`, "Value"]}
+                content={({ active, payload }) => {
+                  if (!active || !payload?.length) return null;
+                  return (
+                    <div className="rounded-lg border border-outline-variant/20 bg-surface-container-high px-3 py-2 shadow-lg text-xs">
+                      <p className="text-on-surface-variant mb-0.5">{payload[0].payload.day}</p>
+                      <p className="text-on-surface font-bold mono">${((payload[0].value as number) / 1e6).toFixed(3)}M</p>
+                    </div>
+                  );
+                }}
               />
-              <Area type="monotone" dataKey="value" stroke="#ff5a1f" strokeWidth={2} fill="url(#colorVal)" />
+              <Area type="monotone" dataKey="value" stroke="#FF6A00" strokeWidth={2} fill="url(#colorValue)" animationDuration={800} />
             </AreaChart>
           </ResponsiveContainer>
         </Card>

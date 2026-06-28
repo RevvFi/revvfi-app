@@ -1,4 +1,4 @@
-import { cn, statusBg } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 export function Badge({
   children,
@@ -31,29 +31,24 @@ export function Badge({
   );
 }
 
-export function StatusBadge({
-  status,
-  className,
-}: {
-  status: string;
-  className?: string;
-}) {
+export function StatusBadge({ status, className }: { status: string; className?: string }) {
+  const cfg: Record<string, { label: string; dot: string; text: string; bg: string; border: string }> = {
+    active:      { label: "Active",      dot: "bg-emerald-400",  text: "text-emerald-400",  bg: "bg-emerald-400/10",  border: "border-emerald-400/20" },
+    liquidating: { label: "Liquidating", dot: "bg-red-400",      text: "text-red-400",      bg: "bg-red-400/10",      border: "border-red-400/20" },
+    pending:     { label: "Pending",     dot: "bg-amber-400",    text: "text-amber-400",    bg: "bg-amber-400/10",    border: "border-amber-400/20" },
+    filled:      { label: "Filled",      dot: "bg-blue-400",     text: "text-blue-400",     bg: "bg-blue-400/10",     border: "border-blue-400/20" },
+    settled:     { label: "Settled",     dot: "bg-emerald-400",  text: "text-emerald-400",  bg: "bg-emerald-400/10",  border: "border-emerald-400/20" },
+    inactive:    { label: "Inactive",    dot: "bg-gray-400",     text: "text-gray-400",     bg: "bg-gray-400/10",     border: "border-gray-400/20" },
+    paused:      { label: "Paused",      dot: "bg-amber-400",    text: "text-amber-400",    bg: "bg-amber-400/10",    border: "border-amber-400/20" },
+  };
+
+  const key = status?.toLowerCase() ?? "";
+  const c = cfg[key] ?? { label: status, dot: "bg-gray-400", text: "text-gray-400", bg: "bg-gray-400/10", border: "border-gray-400/20" };
+
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize",
-        statusBg(status),
-        className
-      )}
-    >
-      <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", {
-        "bg-emerald-400": ["active", "healthy", "confirmed", "success", "filled"].includes(status.toLowerCase()),
-        "bg-amber-400": ["pending", "processing", "partially_filled", "warning"].includes(status.toLowerCase()),
-        "bg-orange-400": ["liquidating"].includes(status.toLowerCase()),
-        "bg-red-400": ["cancelled", "defaulted", "error", "halted", "liquidatable"].includes(status.toLowerCase()),
-        "bg-gray-500": ["settled", "expired", "inactive"].includes(status.toLowerCase()),
-      })} />
-      {status.replace(/_/g, " ")}
+    <span className={cn(`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${c.bg} ${c.border} ${c.text}`, className)}>
+      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${c.dot}`} />
+      {c.label}
     </span>
   );
 }

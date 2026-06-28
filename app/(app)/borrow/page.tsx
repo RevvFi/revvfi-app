@@ -74,6 +74,8 @@ function BorrowContent() {
   const [repayAmount, setRepayAmount] = useState("");
   const [depositAmount, setDepositAmount] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [simCollateral, setSimCollateral] = useState(0);
+  const [simBorrow, setSimBorrow] = useState(0);
 
   // Prefer on-chain ratio when a market is selected (avoids stale/wrong backend value).
   // collateralRatio and minCollateralRatio are both in bps (e.g. 20600, 11000).
@@ -135,6 +137,21 @@ function BorrowContent() {
   const bestAPR = (marketOffers?.offers && marketOffers.offers.length > 0)
     ? Math.min(...marketOffers.offers.map(o => o.apr))
     : 0;
+
+  // Sync simulation inputs from collateral/borrow inputs
+  useEffect(() => {
+    setSimCollateral(parseFloat(depositAmount || "0") || 0);
+    setSimBorrow(parseFloat(borrowAmount || "0") || 0);
+  }, [depositAmount, borrowAmount]);
+
+  // Live simulation values
+  const WETH_PRICE = 2500; // fallback — real price from oracle would be better
+  const simCollateralValueUSD = simCollateral * WETH_PRICE;
+  const simMaxBorrow = simCollateralValueUSD / 1.5; // 150% min ratio
+  const simHealthFactor = simBorrow > 0 ? simCollateralValueUSD / (simBorrow * 1.5) : 0;
+  const simLiquidationPrice = simCollateral > 0 && simBorrow > 0 ? (simBorrow * 1.5) / simCollateral : 0;
+  const simBorrowPower = simMaxBorrow > 0 ? Math.min((simBorrow / simMaxBorrow) * 100, 100) : 0;
+  const simHealthColor = simHealthFactor >= 1.5 ? "text-emerald-400" : simHealthFactor >= 1.2 ? "text-amber-400" : "text-red-400";
 
   // Calculate accrued interest (simple interest calculation)
   const calculateAccruedInterest = () => {
@@ -930,6 +947,58 @@ function BorrowContent() {
           </Card>
         )}
       </div>
+
+      {/* Live Simulation Panel — only show when market is selected and user has entered values */}
+      {selectedMarket && (simCollateral > 0 || simBorrow > 0) && (
+        <Card className="p-5 space-y-4">
+          <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+            Live Simulation
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-lg bg-surface-container-low p-3">
+              <p className="text-xs text-on-surface-variant mb-1">Health Factor</p>
+              <p className={`text-lg font-bold mono ${simHealthColor}`}>
+                {simBorrow > 0 ? simHealthFactor.toFixed(2) : "—"}
+              </p>
+            </div>
+            <div className="rounded-lg bg-surface-container-low p-3">
+              <p className="text-xs text-on-surface-variant mb-1">Liquidation Price</p>
+              <p className="text-lg font-bold mono text-on-surface">
+                {simLiquidationPrice > 0 ? `$${simLiquidationPrice.toFixed(0)}` : "—"}
+              </p>
+              <p className="text-[10px] text-on-surface-variant">per WETH</p>
+            </div>
+            <div className="rounded-lg bg-surface-container-low p-3">
+              <p className="text-xs text-on-surface-variant mb-1">Borrow Power Used</p>
+              <p className="text-lg font-bold mono text-on-surface">
+                {simBorrow > 0 ? `${simBorrowPower.toFixed(0)}%` : "—"}
+              </p>
+            </div>
+            <div className="rounded-lg bg-surface-container-low p-3">
+              <p className="text-xs text-on-surface-variant mb-1">Max Borrowable</p>
+              <p className="text-lg font-bold mono text-on-surface">
+                ${simMaxBorrow > 0 ? (simMaxBorrow >= 1000 ? `${(simMaxBorrow / 1000).toFixed(1)}K` : simMaxBorrow.toFixed(0)) : "—"}
+              </p>
+            </div>
+          </div>
+          {simBorrow > 0 && (
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-xs">
+                <span className="text-on-surface-variant">Borrow Power</span>
+                <span className={simHealthColor}>{simBorrowPower.toFixed(0)}%</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-surface-container-low overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    simBorrowPower < 60 ? "bg-emerald-400" : simBorrowPower < 80 ? "bg-amber-400" : "bg-red-400"
+                  }`}
+                  style={{ width: `${simBorrowPower}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Active Positions */}
       <Card>

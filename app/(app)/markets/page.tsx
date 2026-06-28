@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation";
 import { useAccount } from "wagmi";
 import { useMarkets } from "@/hooks/useMarkets";
 import { formatAPR } from "@/lib/utils";
-import { Search, SlidersHorizontal, RefreshCw, Plus } from "lucide-react";
+import { Search, SlidersHorizontal, RefreshCw, Plus, TrendingUp } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
+import { CopyButton } from "@/components/ui/copy-button";
 import type { Market, Asset } from "@/types";
 
 // ── Token logo CDN (atomiclabs via jsDelivr — highly reliable, no API key) ──
@@ -356,13 +358,14 @@ export default function MarketsPage() {
               ))
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="py-24 text-center">
-                  <p className="text-[#9CA3AF] text-sm">No markets found</p>
-                  {search && (
-                    <p className="text-[#9CA3AF]/50 text-xs mt-1">
-                      Try clearing your search
-                    </p>
-                  )}
+                <td colSpan={8} className="py-8">
+                  <EmptyState
+                    icon={TrendingUp}
+                    title="No Active Markets"
+                    description="There are no lending markets matching your filters. Try adjusting your search or create a new market."
+                    action={() => router.push("/markets/create")}
+                    actionLabel="Create Market"
+                  />
                 </td>
               </tr>
             ) : (
@@ -391,9 +394,12 @@ export default function MarketsPage() {
                             <p className="font-semibold text-[#E6E6E6] leading-none">
                               {row.asset.symbol} → {row.secondaryAsset!.symbol}
                             </p>
-                            <p className="text-[10px] text-[#9CA3AF] mt-0.5 font-mono truncate">
-                              {m.address.slice(0, 6)}…{m.address.slice(-4)}
-                            </p>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <span className="text-[10px] text-[#9CA3AF] font-mono truncate">
+                                {m.address.slice(0, 6)}…{m.address.slice(-4)}
+                              </span>
+                              <CopyButton text={m.address} label="Address" />
+                            </div>
                             {address && m.borrower.toLowerCase() === address.toLowerCase() && (
                               <span className="inline-flex items-center h-4 px-1.5 mt-1 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-400">
                                 You: Borrower
@@ -408,9 +414,12 @@ export default function MarketsPage() {
                             <p className="font-semibold text-[#E6E6E6] leading-none">
                               {row.asset.symbol || "—"}
                             </p>
-                            <p className="text-[10px] text-[#9CA3AF] mt-0.5 font-mono truncate">
-                              {m.address.slice(0, 6)}…{m.address.slice(-4)}
-                            </p>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <span className="text-[10px] text-[#9CA3AF] font-mono truncate">
+                                {m.address.slice(0, 6)}…{m.address.slice(-4)}
+                              </span>
+                              <CopyButton text={m.address} label="Address" />
+                            </div>
                             {address && isLoan && m.borrower.toLowerCase() === address.toLowerCase() && (
                               <span className="inline-flex items-center h-4 px-1.5 mt-1 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-400">
                                 You: Borrower

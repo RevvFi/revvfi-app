@@ -338,12 +338,12 @@ export default function DashboardPage() {
                 <p className="text-xs text-on-surface-variant mb-1">Active Markets</p>
                 <p className="text-xl font-bold text-on-surface">{markets?.count ?? "—"}</p>
               </div>
-              <div className="rounded-lg bg-surface-container-low p-3">
-                <p className="text-xs text-on-surface-variant mb-1">Liquidating</p>
-                <p className={`text-xl font-bold ${(liquidations?.count ?? 0) > 0 ? "text-orange-400" : "text-on-surface"}`}>
-                  {liquidations?.count ?? 0}
+              <Link href="/auctions" className="rounded-lg bg-surface-container-low p-3 block hover:bg-surface-container transition-colors">
+                <p className="text-xs text-on-surface-variant mb-1">Active Auctions</p>
+                <p className={`text-xl font-bold ${(liquidations?.auctions?.length ?? liquidations?.count ?? 0) > 0 ? "text-orange-400" : "text-on-surface"}`}>
+                  {liquidations?.auctions?.length ?? liquidations?.count ?? 0}
                 </p>
-              </div>
+              </Link>
             </div>
             {markets?.markets.length ? (
               markets.markets.slice(0, 3).map((m) => (

@@ -12,6 +12,7 @@ import {
   useActiveAuction,
   useAuctionDiscount,
   useTriggerLiquidation,
+  useIsLiquidating,
 } from "@/hooks/useLiquidation";
 import { usePlaceBid } from "@/hooks/useAuctions";
 import { MarketParticipants } from "@/components/MarketParticipants";
@@ -51,9 +52,13 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
   // Liquidation hooks
   const { data: liquidationStatus } = useLiquidationStatus(address);
   const { data: activeAuction } = useActiveAuction(address);
+  const { data: isLiquidatingOnChain } = useIsLiquidating(address);
   const { mutate: triggerLiquidation, isPending: isTriggeringLiquidation } = useTriggerLiquidation();
   const { mutate: placeBid, isPending: isPlacingBid } = usePlaceBid();
   const auctionDiscount = useAuctionDiscount(activeAuction);
+
+  // Market is actively liquidating if on-chain flag is set OR an active auction exists
+  const isCurrentlyLiquidating = isLiquidatingOnChain || !!activeAuction || market?.is_liquidating;
 
   const [bidAmount, setBidAmount] = useState("");
 
@@ -68,7 +73,7 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
 
   if (isLoading) {
     return (
-      <div className="p-6 space-y-4 max-w-[1400px] mx-auto">
+      <div className="p-6 space-y-4 max-w-350 mx-auto">
         <Skeleton className="h-8 w-64" />
         <div className="grid grid-cols-3 gap-4">
           {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-32" />)}
@@ -79,7 +84,7 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
 
   if (!market) {
     return (
-      <div className="p-6 flex flex-col items-center justify-center min-h-[400px]">
+      <div className="p-6 flex flex-col items-center justify-center min-h-100">
         <p className="text-on-surface-variant">Market not found</p>
         <Link href="/markets" className="mt-3 text-sm text-primary hover:underline">← Back to Markets</Link>
       </div>
@@ -103,7 +108,7 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
     : "text-red-400";
 
   return (
-    <div className="p-6 space-y-6 max-w-[1400px] mx-auto">
+    <div className="p-6 space-y-6 max-w-350 mx-auto">
       {/* Breadcrumb & header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -238,7 +243,7 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
               </div>
             </div>
 
-            {liquidationStatus.isLiquidatable && !activeAuction && (
+            {liquidationStatus.isLiquidatable && !isCurrentlyLiquidating && (
               <Alert className="mb-4 border-red-500/50 bg-red-500/10">
                 <AlertDescription className="text-sm text-red-400">
                   ⚠️ This position is undercollateralized and can be liquidated by anyone.
@@ -246,7 +251,14 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
               </Alert>
             )}
 
-            {liquidationStatus.isLiquidatable && !activeAuction && (
+            {isCurrentlyLiquidating ? (
+              <Link href="/auctions">
+                <Button className="w-full gap-2" variant="secondary">
+                  <Gavel className="h-4 w-4" />
+                  Auction Active — View in Auctions
+                </Button>
+              </Link>
+            ) : liquidationStatus.isLiquidatable ? (
               <Button
                 className="w-full gap-2"
                 variant="destructive"
@@ -256,7 +268,7 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
                 <Gavel className="h-4 w-4" />
                 {isTriggeringLiquidation ? "Triggering..." : "Trigger Liquidation"}
               </Button>
-            )}
+            ) : null}
 
             {!liquidationStatus.isLiquidatable && (
               <Alert className="border-emerald-500/50 bg-emerald-500/10">

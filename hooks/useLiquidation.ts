@@ -89,8 +89,42 @@ export function useActiveAuction(marketAddress?: string) {
   });
 }
 
-// ─── Dutch auction discount % (pure calculation, not a query) ────────────────
+// ─── Dutch auction price + discount % (polling every 10s) ───────────────────
 
+export function useDutchAuctionPrice(auction: Auction | null | undefined) {
+  return useQuery({
+    queryKey: ["dutch-auction-price", auction?.auction_id],
+    queryFn: () => {
+      if (!auction) return { currentPrice: BigInt(0), discount: 0 };
+
+      const now = Math.floor(Date.now() / 1000);
+      const duration = auction.end_time - auction.start_time;
+
+      if (duration <= 0) return { currentPrice: BigInt(0), discount: 0 };
+
+      const elapsed = now - auction.start_time;
+
+      if (elapsed <= 0) {
+        return { currentPrice: BigInt(auction.debt_amount), discount: 0 };
+      }
+      if (elapsed >= duration) {
+        return { currentPrice: BigInt(0), discount: 100 };
+      }
+
+      const discountPct = (elapsed / duration) * 100;
+      // Linear decay: price = debtAmount × (1 - discount/100)
+      const debtBigInt = BigInt(auction.debt_amount);
+      const multiplier = BigInt(Math.floor((1 - discountPct / 100) * 10_000));
+      const currentPrice = (debtBigInt * multiplier) / BigInt(10_000);
+
+      return { currentPrice, discount: discountPct };
+    },
+    enabled: !!auction,
+    refetchInterval: 10_000,
+  });
+}
+
+// Simpler hook for just the discount percentage (used on market detail page)
 export function useAuctionDiscount(auction: Auction | null | undefined): number {
   if (!auction) return 0;
   const now = Math.floor(Date.now() / 1000);
@@ -100,6 +134,36 @@ export function useAuctionDiscount(auction: Auction | null | undefined): number 
   if (elapsed <= 0) return 0;
   if (elapsed >= duration) return 100;
   return (elapsed / duration) * 100;
+}
+
+// ─── On-chain check: is market currently in liquidation? ─────────────────────
+
+const IS_LIQUIDATING_ABI = [
+  {
+    name: "isLiquidating",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "bool" }],
+  },
+] as const;
+
+export function useIsLiquidating(marketAddress?: string) {
+  const publicClient = usePublicClient();
+
+  return useQuery({
+    queryKey: ["is-liquidating", marketAddress],
+    queryFn: async () => {
+      if (!marketAddress || !publicClient) return false;
+      return publicClient.readContract({
+        address: marketAddress as `0x${string}`,
+        abi: IS_LIQUIDATING_ABI,
+        functionName: "isLiquidating",
+      });
+    },
+    enabled: !!marketAddress && !!publicClient,
+    refetchInterval: 15_000,
+  });
 }
 
 // ─── Trigger liquidation (blockchain write) ──────────────────────────────────

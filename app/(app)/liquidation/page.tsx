@@ -233,9 +233,9 @@ export default function LiquidationPage() {
   const { data: liquidations, isLoading } = useLiquidations();
 
   const liquidatableMarkets =
-    liquidations?.markets.filter((m) => !m.is_liquidating) ?? [];
+    liquidations?.markets?.filter((m) => !m.is_liquidating) ?? [];
   const activeAuctionMarkets =
-    liquidations?.markets.filter((m) => m.is_liquidating) ?? [];
+    liquidations?.markets?.filter((m) => m.is_liquidating) ?? [];
 
   const hasAnything =
     liquidatableMarkets.length > 0 || activeAuctionMarkets.length > 0;

@@ -226,6 +226,21 @@ export interface WithdrawalEpoch {
 
 // ─── Auction ──────────────────────────────────────────────────────────────────
 
+export interface AssetInfo {
+  address: string;
+  symbol: string;
+  decimals: number;
+}
+
+export interface AuctionBid {
+  bid_id: number;
+  auction_id: number;
+  bidder: string;
+  amount: string;
+  timestamp: number;
+  tx_hash: string;
+}
+
 export interface Auction {
   auction_id: number;
   market_address: string;
@@ -234,23 +249,39 @@ export interface Auction {
   debt_amount: string;
   current_price: string;
   highest_bid: string;
-  highest_bidder: string;
+  highest_bidder: string | null;
   status: "active" | "settled" | "cancelled";
   time_remaining: number;
   start_time: number;
   end_time: number;
+  // Joined from markets table (returned by /liquidations and /liquidations/auctions)
+  borrow_asset?: AssetInfo;
+  collateral_asset?: AssetInfo;
+}
+
+export interface AuctionsResponse {
+  auctions: Auction[];
+  count: number;
 }
 
 export interface LiquidationsResponse {
-  markets: Market[];
+  // Legacy shape: liquidatable markets (not yet in auction)
+  markets?: Market[];
+  // New shape: active auctions returned by updated backend
+  auctions?: Auction[];
   count: number;
-  total_collateral: string;
-  total_debt: string;
+  total_collateral?: string;
+  total_debt?: string;
 }
 
 export interface AuctionPrice {
   auction_id: string;
   current_price: string;
+}
+
+export interface AuctionBidsResponse {
+  bids: AuctionBid[];
+  count: number;
 }
 
 // ─── Transactions ─────────────────────────────────────────────────────────────

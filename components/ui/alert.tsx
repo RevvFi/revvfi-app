@@ -20,6 +20,18 @@ export function Alert({
   );
 }
 
+export function AlertTitle({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <p className={cn("text-sm font-semibold text-on-surface mb-1", className)}>{children}</p>
+  );
+}
+
 export function AlertDescription({
   children,
   className,

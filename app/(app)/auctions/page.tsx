@@ -1,17 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useLiquidations, useCountdown, usePlaceBid } from "@/hooks/useAuctions";
+import { useLiquidations, useCountdown, usePlaceBid, useSettleAuction, useCanSettle } from "@/hooks/useAuctions";
 import { useDutchAuctionPrice } from "@/hooks/useLiquidation";
+import { useAccount } from "wagmi";
 import { AuctionCard } from "./_components/AuctionCard";
 import { BidHistoryCard } from "./_components/BidHistoryCard";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { formatAddress, formatCountdown, fmtUSD } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
-import { Filter, History, Zap, ShieldCheck, Gavel, TrendingDown, Activity } from "lucide-react";
+import { Filter, History, Zap, ShieldCheck, Gavel, TrendingDown, Activity, Trophy, Award, CheckCircle, Loader2 } from "lucide-react";
 import { formatUnits } from "viem";
 import type { Auction } from "@/types";
 
@@ -32,9 +34,12 @@ function AuctionDetailPanel({
   bidAmount: string;
   setBidAmount: (v: string) => void;
 }) {
+  const { address } = useAccount();
   const remaining = useCountdown(auction.end_time);
   const { data: priceData } = useDutchAuctionPrice(auction);
   const placeBid = usePlaceBid();
+  const settleAuction = useSettleAuction();
+  const settlementInfo = useCanSettle(auction, address);
 
   const isUrgent = remaining < 3600 && remaining > 0;
   const discount = priceData?.discount ?? 0;
@@ -49,13 +54,21 @@ function AuctionDetailPanel({
   const debtNum = parseFloat(formatUnits(BigInt(auction.debt_amount), debtDecimals));
   const currentPriceNum = parseFloat(formatUnits(currentPrice, debtDecimals));
 
+  const isWinner = !!address && auction.highest_bidder?.toLowerCase() === address.toLowerCase();
+  const isSettled = auction.status === "settled";
+
   async function handleBid() {
     if (!bidAmount || parseFloat(bidAmount) <= 0) return;
+
+    // TEMPORARY: Hardcode USDC address until backend returns asset info
+    const USDC_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+    const USDC_DECIMALS = 6;
+
     await placeBid.mutateAsync({
       auctionId: auction.auction_id,
       bidAmount,
-      borrowAssetAddress: auction.borrow_asset?.address ?? "",
-      borrowAssetDecimals: debtDecimals,
+      borrowAssetAddress: auction.borrow_asset?.address || USDC_ADDRESS,
+      borrowAssetDecimals: auction.borrow_asset?.decimals || USDC_DECIMALS,
     });
     setBidAmount("");
   }
@@ -136,33 +149,82 @@ function AuctionDetailPanel({
         </div>
       </div>
 
-      {/* Bid input */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <Input
-          label="Bid Amount"
-          type="number"
-          placeholder="0.00"
-          value={bidAmount}
-          onChange={(e) => setBidAmount(e.target.value)}
-          suffix={debtSymbol}
-          className="flex-1"
-        />
-        <div className="flex flex-col justify-end">
-          <Button
-            size="lg"
-            onClick={handleBid}
-            loading={placeBid.isPending}
-            disabled={!bidAmount || parseFloat(bidAmount) <= 0}
-            className="gap-2 whitespace-nowrap"
-          >
-            <Zap className="h-4 w-4" />
-            Place Bid
-          </Button>
-        </div>
-      </div>
-      <p className="text-[10px] text-on-surface-variant mt-2 text-center">
-        Bidding will approve {debtSymbol} spend and place bid in two on-chain steps.
-      </p>
+      {/* Winner / settled section */}
+      {isSettled ? (
+        <Alert className="border-emerald-500/30 bg-emerald-500/8">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-emerald-400">Auction Settled</p>
+              <p className="text-xs text-on-surface-variant">
+                Winner received {collateralNum.toFixed(4)} {collateralSymbol}
+              </p>
+            </div>
+          </div>
+        </Alert>
+      ) : isWinner ? (
+        <Alert className="border-amber-500/30 bg-amber-500/8">
+          <div className="flex items-center gap-2 mb-2">
+            <Trophy className="h-4 w-4 text-amber-400 shrink-0" />
+            <p className="text-sm font-semibold text-amber-400">You&apos;re Winning This Auction!</p>
+          </div>
+          <div className="space-y-1 text-xs text-on-surface-variant mb-3">
+            <p>Your bid: <span className="text-on-surface font-medium">{fmtUSD(auction.highest_bid, debtDecimals)} {debtSymbol}</span></p>
+            <p>You&apos;ll receive: <span className="text-emerald-400 font-bold">{collateralNum.toFixed(4)} {collateralSymbol}</span></p>
+          </div>
+          {settlementInfo.canSettle ? (
+            <Button
+              size="sm"
+              className="w-full gap-2"
+              onClick={() => settleAuction.mutate({ auctionId: auction.auction_id })}
+              loading={settleAuction.isPending}
+            >
+              {settleAuction.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Award className="h-3.5 w-3.5" />
+              )}
+              Settle &amp; Claim {collateralNum.toFixed(4)} {collateralSymbol}
+            </Button>
+          ) : (
+            <p className="text-xs text-on-surface-variant">
+              ⏳ {settlementInfo.reason}
+            </p>
+          )}
+        </Alert>
+      ) : null}
+
+      {/* Bid input — only show when active and user is not already the winner */}
+      {!isSettled && !isWinner && (
+        <>
+          <div className="flex flex-col sm:flex-row gap-3 mt-4">
+            <Input
+              label="Bid Amount"
+              type="number"
+              placeholder="0.00"
+              value={bidAmount}
+              onChange={(e) => setBidAmount(e.target.value)}
+              suffix={debtSymbol}
+              className="flex-1"
+            />
+            <div className="flex flex-col justify-end">
+              <Button
+                size="lg"
+                onClick={handleBid}
+                loading={placeBid.isPending}
+                disabled={!bidAmount || parseFloat(bidAmount) <= 0}
+                className="gap-2 whitespace-nowrap"
+              >
+                <Zap className="h-4 w-4" />
+                Place Bid
+              </Button>
+            </div>
+          </div>
+          <p className="text-[10px] text-on-surface-variant mt-2 text-center">
+            Bidding will approve {debtSymbol} spend and place bid in two on-chain steps.
+          </p>
+        </>
+      )}
     </Card>
   );
 }

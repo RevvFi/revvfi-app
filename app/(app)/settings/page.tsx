@@ -1,17 +1,22 @@
 "use client";
 
+import Link from "next/link";
 import { useAccount, useDisconnect } from "wagmi";
 import { useAuthStore } from "@/store/auth.store";
 import { useSIWE } from "@/hooks/useAuth";
 import { useMyOffers, useCancelOffer } from "@/hooks/useOffers";
+import { useMyBids, useSettleAuction, useCanSettle } from "@/hooks/useAuctions";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatAddress, fmtUSD, formatAPR, formatTimestamp } from "@/lib/utils";
+import { formatAddress, fmtUSD, formatAPR, formatTimestamp, formatCountdown } from "@/lib/utils";
+import { formatUnits } from "viem";
 import {
   LogOut, Wallet,
   FileText, CheckCircle2, XCircle, Clock, Trash2,
+  Award, CheckCircle, Loader2, Gavel,
 } from "lucide-react";
+import type { Auction } from "@/types";
 
 export default function SettingsPage() {
   const { address, isConnected } = useAccount();
@@ -268,6 +273,9 @@ export default function SettingsPage() {
         )}
       </Card>
 
+      {/* My Bids */}
+      <MyBidsSection address={address} />
+
       {/* Notifications */}
       <Card className="p-5 space-y-4">
         <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Notifications</p>
@@ -323,6 +331,145 @@ export default function SettingsPage() {
           </div>
         </div>
       </Card>
+    </div>
+  );
+}
+
+// ─── My Bids Section ──────────────────────────────────────────────────────────
+
+function MyBidsSection({ address }: { address?: string }) {
+  const { data: myBids, isLoading } = useMyBids(address);
+  const { mutate: settleAuction, isPending: isSettling } = useSettleAuction();
+
+  return (
+    <Card className="p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <Award className="h-4 w-4 text-amber-400" />
+        <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">My Auction Bids</p>
+        {!isLoading && myBids && myBids.length > 0 && (
+          <span className="ml-auto text-xs text-on-surface-variant">{myBids.length} bid{myBids.length !== 1 ? "s" : ""}</span>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-3">
+          {[1, 2].map((i) => <Skeleton key={i} className="h-24 w-full rounded-lg" />)}
+        </div>
+      ) : !myBids || myBids.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-10 rounded-lg border border-outline-variant/20 bg-surface-container/30">
+          <div className="h-12 w-12 rounded-full bg-surface-container flex items-center justify-center mb-3">
+            <Gavel className="h-6 w-6 text-on-surface-variant/40" />
+          </div>
+          <p className="text-sm font-medium text-on-surface">No auction bids yet</p>
+          <p className="text-xs text-on-surface-variant mt-1">Place a bid on the Auctions page</p>
+          <Link href="/auctions" className="mt-3">
+            <Button variant="secondary" size="sm">Browse Auctions</Button>
+          </Link>
+        </div>
+      ) : (
+        <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+          {myBids.map((auction: Auction) => (
+            <BidCard
+              key={auction.auction_id}
+              auction={auction}
+              userAddress={address}
+              onSettle={() => settleAuction({ auctionId: auction.auction_id })}
+              isSettling={isSettling}
+            />
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function BidCard({
+  auction,
+  userAddress,
+  onSettle,
+  isSettling,
+}: {
+  auction: Auction;
+  userAddress?: string;
+  onSettle: () => void;
+  isSettling: boolean;
+}) {
+  const settlementInfo = useCanSettle(auction, userAddress);
+  const now = Math.floor(Date.now() / 1000);
+  const timeRemaining = Math.max(0, auction.end_time - now);
+
+  const debtDecimals = auction.borrow_asset?.decimals ?? 6;
+  const collateralDecimals = auction.collateral_asset?.decimals ?? 18;
+  const debtSymbol = auction.borrow_asset?.symbol ?? "USDC";
+  const collateralSymbol = auction.collateral_asset?.symbol ?? "WETH";
+
+  const bidAmountFmt = formatUnits(BigInt(auction.highest_bid || "0"), debtDecimals);
+  const collateralAmountFmt = parseFloat(
+    formatUnits(BigInt(auction.collateral_amount), collateralDecimals)
+  ).toFixed(4);
+
+  const isWinning =
+    auction.highest_bidder?.toLowerCase() === userAddress?.toLowerCase();
+
+  return (
+    <div className="p-3 rounded-lg border border-outline-variant/20 bg-surface-container/50 space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-semibold text-on-surface">Auction #{auction.auction_id}</p>
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+              auction.status === "active" ? "bg-blue-500/10 text-blue-400" :
+              auction.status === "settled" ? "bg-emerald-500/10 text-emerald-400" :
+              "bg-outline-variant/20 text-on-surface-variant"
+            }`}>{auction.status}</span>
+            {isWinning && auction.status === "active" && (
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400">Winning</span>
+            )}
+          </div>
+          <p className="text-xs text-on-surface-variant mono mt-0.5">{formatAddress(auction.market_address)}</p>
+        </div>
+        <Link href="/auctions">
+          <Button variant="ghost" size="sm" className="text-xs text-on-surface-variant hover:text-on-surface h-7 px-2">View →</Button>
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="bg-surface-container-low rounded p-2">
+          <p className="text-[10px] text-on-surface-variant mb-0.5">Your Bid</p>
+          <p className="text-sm font-bold text-on-surface mono">{parseFloat(bidAmountFmt).toFixed(2)} {debtSymbol}</p>
+        </div>
+        <div className="bg-surface-container-low rounded p-2">
+          <p className="text-[10px] text-on-surface-variant mb-0.5">You&apos;ll Receive</p>
+          <p className="text-sm font-bold text-emerald-400 mono">{collateralAmountFmt} {collateralSymbol}</p>
+        </div>
+      </div>
+
+      {auction.status === "active" && (
+        <div className="flex items-center gap-1.5 text-xs text-on-surface-variant">
+          <Clock className="h-3 w-3" />
+          {timeRemaining > 0 ? `Ends in ${formatCountdown(timeRemaining)}` : "Ended — ready to settle"}
+        </div>
+      )}
+
+      {auction.status === "active" && settlementInfo.canSettle && (
+        <Button size="sm" className="w-full gap-2" onClick={onSettle} disabled={isSettling}>
+          {isSettling ? <Loader2 className="h-3 w-3 animate-spin" /> : <Award className="h-3 w-3" />}
+          Settle &amp; Claim {collateralAmountFmt} {collateralSymbol}
+        </Button>
+      )}
+
+      {auction.status === "active" && !settlementInfo.canSettle && (
+        <p className="text-xs text-on-surface-variant bg-surface-container-low rounded p-2">
+          ⏳ {settlementInfo.reason}
+        </p>
+      )}
+
+      {auction.status === "settled" && (
+        <div className="flex items-center gap-2 rounded p-2 bg-emerald-500/8 text-xs text-emerald-400">
+          <CheckCircle className="h-3 w-3" />
+          Settled — Collateral claimed
+        </div>
+      )}
     </div>
   );
 }

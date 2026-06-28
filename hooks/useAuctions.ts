@@ -7,6 +7,7 @@ import { erc20Abi, parseUnits, type Address } from "viem";
 import { toast } from "sonner";
 import { auctionService } from "@/services/auction.service";
 import { queryKeys } from "@/constants/query-keys";
+import type { Auction } from "@/types";
 import { LIQUIDATOR_ABI } from "@/lib/contracts/abis";
 import { CONTRACT_ADDRESSES } from "@/lib/contracts/addresses";
 
@@ -105,4 +106,89 @@ export function usePlaceBid() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+}
+
+export function useSettleAuction() {
+  const qc = useQueryClient();
+  const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient();
+
+  return useMutation({
+    mutationFn: async ({ auctionId }: { auctionId: number }) => {
+      toast.info("Settling auction…");
+      const tx = await writeContractAsync({
+        address: CONTRACT_ADDRESSES.liquidator,
+        abi: LIQUIDATOR_ABI,
+        functionName: "settleAuction",
+        args: [BigInt(auctionId)],
+      });
+      const receipt = await publicClient!.waitForTransactionReceipt({ hash: tx });
+      if (receipt.status !== "success") throw new Error("Settlement transaction failed");
+      return tx;
+    },
+    onSuccess: (_, { auctionId }) => {
+      qc.invalidateQueries({ queryKey: ["auctions"] });
+      qc.invalidateQueries({ queryKey: queryKeys.auctions.detail(auctionId) });
+      qc.invalidateQueries({ queryKey: ["active-auction"] });
+      qc.invalidateQueries({ queryKey: ["liquidation-status"] });
+      qc.invalidateQueries({ queryKey: ["balances"] });
+      qc.invalidateQueries({ queryKey: ["my-bids"] });
+      toast.success("Auction settled! Collateral transferred to your wallet.");
+    },
+    onError: (e: Error) => {
+      if (e.message?.includes("User rejected")) {
+        toast.error("Transaction rejected by user");
+      } else if (e.message?.includes("AuctionNotEnded")) {
+        toast.error("Auction hasn't ended yet");
+      } else if (e.message?.includes("AuctionNotActive")) {
+        toast.error("Auction is not active or already settled");
+      } else if (e.message?.includes("NoBids")) {
+        toast.error("No bids placed on this auction");
+      } else {
+        toast.error(e.message || "Failed to settle auction");
+      }
+    },
+  });
+}
+
+export function useMyBids(userAddress?: string) {
+  return useQuery({
+    queryKey: ["my-bids", userAddress],
+    queryFn: async () => {
+      if (!userAddress) return [];
+      const data = await auctionService.getLiquidations();
+      return (data.auctions ?? []).filter(
+        (a) => a.highest_bidder?.toLowerCase() === userAddress.toLowerCase()
+      );
+    },
+    enabled: !!userAddress,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useCanSettle(auction: Auction | null, userAddress?: string) {
+  if (!auction || !userAddress) return { canSettle: false, reason: "No auction or user" as string };
+
+  const isHighestBidder =
+    auction.highest_bidder?.toLowerCase() === userAddress.toLowerCase();
+
+  const now = Math.floor(Date.now() / 1000);
+  const auctionEnded = now >= auction.end_time;
+  const hasBids = auction.highest_bid && BigInt(auction.highest_bid) > BigInt(0);
+  const bidCoversDebt =
+    hasBids && BigInt(auction.highest_bid) >= BigInt(auction.debt_amount);
+
+  const canSettle = auction.status === "active" && (auctionEnded || !!bidCoversDebt);
+
+  return {
+    canSettle,
+    isHighestBidder,
+    auctionEnded,
+    bidCoversDebt,
+    reason: !canSettle
+      ? auctionEnded
+        ? "Auction ended but no valid bids"
+        : "Auction still active. Wait for end time or bid the full debt amount."
+      : null,
+  };
 }

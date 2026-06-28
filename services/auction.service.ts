@@ -18,9 +18,9 @@ export const auctionService = {
     return get<{ bids: AuctionBid[]; count: number }>(`/liquidations/auctions/${id}/bids`);
   },
 
-  async getAuctionsByMarket(marketAddress: string, status?: string): Promise<{ auctions: Auction[] }> {
+  async getAuctionsByMarket(marketAddress: string, status?: string): Promise<{ auctions: Auction[]; count: number }> {
     const params = new URLSearchParams({ market_address: marketAddress });
     if (status) params.set("status", status);
-    return get<{ auctions: Auction[] }>(`/liquidations/auctions?${params.toString()}`);
+    return get<{ auctions: Auction[]; count: number }>(`/liquidations?${params.toString()}`);
   },
 };

@@ -263,3 +263,96 @@ body {
 [cmdk-input] { all: unset; }
 [cmdk-input]:focus, [cmdk-input]:focus-visible { outline: none !important; box-shadow: none !important; }
 [cmdk-item] { user-select: none; }
+
+/* ── Light theme ──────────────────────────────────────────────────────────── */
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* Backgrounds */
+  --color-background:                #F8F9FA;
+  --color-surface:                   #FFFFFF;
+  --color-surface-dim:               #EAECEF;
+  --color-surface-bright:            #FFFFFF;
+  --color-surface-container-lowest:  #FFFFFF;
+  --color-surface-container-low:     #F1F3F5;
+  --color-surface-container:         #E9ECEF;
+  --color-surface-container-high:    #DEE2E6;
+  --color-surface-container-highest: #CED4DA;
+
+  /* Text */
+  --color-on-surface:                #111827;
+  --color-on-surface-variant:        #4B5563;
+  --color-inverse-surface:           #111827;
+  --color-inverse-on-surface:        #F9FAFB;
+  --color-on-background:             #111827;
+
+  /* Borders */
+  --color-outline:                   #9CA3AF;
+  --color-outline-variant:           #D1D5DB;
+  --color-surface-tint:              #E85D00;
+  --color-surface-variant:           #F3F4F6;
+
+  /* Primary — slightly darker orange for readability on white */
+  --color-primary:                   #E85D00;
+  --color-on-primary:                #FFFFFF;
+  --color-primary-container:         #E85D00;
+  --color-on-primary-container:      #FFFFFF;
+  --color-inverse-primary:           #FF8C47;
+  --color-primary-fixed:             #FFE4D0;
+  --color-primary-fixed-dim:         #FF8C47;
+  --color-on-primary-fixed:          #1a0500;
+  --color-on-primary-fixed-variant:  #8a3a00;
+
+  /* Secondary */
+  --color-secondary:                 #4B5563;
+  --color-on-secondary:              #FFFFFF;
+  --color-secondary-container:       #E5E7EB;
+  --color-on-secondary-container:    #111827;
+  --color-secondary-fixed:           #D1D5DB;
+  --color-secondary-fixed-dim:       #9CA3AF;
+  --color-on-secondary-fixed:        #111827;
+  --color-on-secondary-fixed-variant:#374151;
+
+  /* Tertiary */
+  --color-tertiary:                  #2563EB;
+  --color-on-tertiary:               #FFFFFF;
+  --color-tertiary-container:        #1D4ED8;
+  --color-on-tertiary-container:     #FFFFFF;
+
+  /* Error */
+  --color-error:                     #DC2626;
+  --color-on-error:                  #FFFFFF;
+  --color-error-container:           #B91C1C;
+  --color-on-error-container:        #FFFFFF;
+}
+
+[data-theme="light"] body {
+  background-color: #F8F9FA;
+  color: #111827;
+}
+
+/* Scrollbar for light theme */
+[data-theme="light"] ::-webkit-scrollbar-track  { background: #F1F3F5; }
+[data-theme="light"] ::-webkit-scrollbar-thumb  { background: #9CA3AF; }
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #6B7280; }
+
+/* Selection */
+[data-theme="light"] ::selection {
+  background: rgba(232, 93, 0, 0.15);
+  color: #111827;
+}
+
+/* Shimmer for light theme */
+[data-theme="light"] .shimmer {
+  background: linear-gradient(90deg, #E9ECEF 0%, #F1F3F5 50%, #E9ECEF 100%);
+  background-size: 200% 100%;
+}
+
+/* Gradient text for light theme */
+[data-theme="light"] .gradient-text {
+  background: linear-gradient(135deg, #E85D00 0%, #FF6A00 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}

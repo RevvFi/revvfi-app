@@ -32,6 +32,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@400;500;600&display=swap"
           rel="stylesheet"
         />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var t=localStorage.getItem('revvfi-theme');document.documentElement.setAttribute('data-theme',t||'dark');})();`,
+          }}
+        />
       </head>
       <body className="h-full bg-background text-on-surface antialiased">
         <Providers>{children}</Providers>

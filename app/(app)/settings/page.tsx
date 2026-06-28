@@ -6,6 +6,8 @@ import { useAuthStore } from "@/store/auth.store";
 import { useSIWE } from "@/hooks/useAuth";
 import { useMyOffers, useCancelOffer } from "@/hooks/useOffers";
 import { useMyBids, useSettleAuction, useCanSettle } from "@/hooks/useAuctions";
+import { useTheme } from "@/components/theme-provider";
+import { Sun, Moon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,6 +25,7 @@ export default function SettingsPage() {
   const { disconnect } = useDisconnect();
   const { user, isAuthenticated } = useAuthStore();
   const { logout } = useSIWE();
+  const { theme, setTheme } = useTheme();
 
   // My Offers data
   const { data: myOffersData, isLoading: offersLoading } = useMyOffers(address);
@@ -90,6 +93,41 @@ export default function SettingsPage() {
           <Button variant="destructive" size="sm" onClick={handleLogout} className="gap-2">
             <LogOut className="h-3.5 w-3.5" /> Sign Out & Disconnect
           </Button>
+        </div>
+      </Card>
+
+      {/* Preferences */}
+      <Card className="p-5 space-y-4">
+        <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Preferences</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-surface-container-low flex items-center justify-center">
+              {theme === "dark" ? (
+                <Moon className="h-4 w-4 text-on-surface-variant" />
+              ) : (
+                <Sun className="h-4 w-4 text-amber-500" />
+              )}
+            </div>
+            <div>
+              <p className="text-sm font-medium text-on-surface">Appearance</p>
+              <p className="text-xs text-on-surface-variant capitalize">{theme} mode</p>
+            </div>
+          </div>
+          {/* Toggle switch */}
+          <button
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className={`relative h-6 w-11 rounded-full transition-colors duration-200 focus-visible:outline-none ${
+              theme === "light" ? "bg-primary" : "bg-outline"
+            }`}
+            role="switch"
+            aria-checked={theme === "light"}
+          >
+            <span
+              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                theme === "light" ? "translate-x-5" : "translate-x-0.5"
+              }`}
+            />
+          </button>
         </div>
       </Card>
 

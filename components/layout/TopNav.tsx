@@ -26,8 +26,8 @@ function navCls(active: boolean) {
     "flex items-center px-4 text-sm font-medium whitespace-nowrap",
     "border-b-2 transition-colors duration-150",
     active
-      ? "text-[#FF6A00] border-[#FF6A00]"
-      : "text-[#9CA3AF] border-transparent hover:text-[#E6E6E6]"
+      ? "text-primary border-[#FF6A00]"
+      : "text-on-surface-variant border-transparent hover:text-on-surface"
   );
 }
 
@@ -55,13 +55,13 @@ export function TopNav() {
     <>
       {/* ── Top bar ───────────────────────────────────────────────────── */}
       <header
-        className="flex h-16 shrink-0 items-stretch border-b border-[#1A1A1A] bg-[#0A0A0A]"
+        className="flex h-16 shrink-0 items-stretch border-b border-outline-variant bg-background"
         style={{ zIndex: 50 }}
       >
         {/* Logo */}
         <Link
           href="/dashboard"
-          className="flex items-center gap-2 px-4 border-r border-[#1A1A1A] shrink-0 hover:bg-white/[0.02] transition-colors"
+          className="flex items-center gap-2 px-4 border-r border-outline-variant shrink-0 hover:bg-surface-container transition-colors"
         >
           <Image
             src="/favicon-96x96.png"
@@ -71,8 +71,8 @@ export function TopNav() {
             className="rounded-sm"
             priority
           />
-          <span className="text-sm font-bold text-[#E6E6E6] tracking-tight select-none hidden sm:block">
-            Revv<span className="text-[#FF6A00]">Fi</span>
+          <span className="text-sm font-bold text-on-surface tracking-tight select-none hidden sm:block">
+            Revv<span className="text-primary">Fi</span>
           </span>
         </Link>
 
@@ -86,20 +86,20 @@ export function TopNav() {
         </nav>
 
         {/* Right side */}
-        <div className="flex items-center gap-1 px-3 ml-auto border-l border-[#1A1A1A] shrink-0">
+        <div className="flex items-center gap-1 px-3 ml-auto border-l border-outline-variant shrink-0">
           {/* ⌘K search trigger — desktop only */}
           <button
             onClick={openSearch}
-            className="hidden lg:flex items-center gap-2 h-7 px-2.5 rounded border border-[#1A1A1A] text-[11px] text-[#9CA3AF] hover:text-[#E6E6E6] hover:border-[#2D2D2D] transition-colors mr-1 select-none"
+            className="hidden lg:flex items-center gap-2 h-7 px-2.5 rounded border border-outline-variant text-[11px] text-on-surface-variant hover:text-on-surface hover:border-[#2D2D2D] transition-colors mr-1 select-none"
             title="Search (⌘K)"
           >
             <Search className="h-3 w-3" />
             <span>Search</span>
-            <kbd className="rounded bg-[#1A1A1A] px-1 py-0.5 text-[10px]">⌘K</kbd>
+            <kbd className="rounded bg-outline-variant px-1 py-0.5 text-[10px]">⌘K</kbd>
           </button>
 
           {/* Network pill — large screens only */}
-          <div className="hidden lg:flex items-center gap-1.5 px-2.5 h-7 rounded border border-[#1A1A1A] text-[11px] font-medium text-[#9CA3AF] select-none mr-1">
+          <div className="hidden lg:flex items-center gap-1.5 px-2.5 h-7 rounded border border-outline-variant text-[11px] font-medium text-on-surface-variant select-none mr-1">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa/128/color/eth.png"
@@ -119,8 +119,8 @@ export function TopNav() {
             className={cn(
               "h-8 w-8 flex items-center justify-center rounded transition-colors",
               isActive("/settings")
-                ? "text-[#FF6A00]"
-                : "text-[#9CA3AF] hover:text-[#E6E6E6]"
+                ? "text-primary"
+                : "text-on-surface-variant hover:text-on-surface"
             )}
           >
             <Settings className="h-3.75 w-3.75" />
@@ -132,7 +132,7 @@ export function TopNav() {
           {/* Hamburger — mobile only */}
           <button
             onClick={() => setMobileOpen((o) => !o)}
-            className="md:hidden ml-1 h-8 w-8 flex items-center justify-center text-[#9CA3AF] hover:text-[#E6E6E6] transition-colors"
+            className="md:hidden ml-1 h-8 w-8 flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors"
             aria-label="Toggle navigation"
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -143,7 +143,7 @@ export function TopNav() {
       {/* ── Mobile drawer ─────────────────────────────────────────────── */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 top-16 z-40 bg-[#0A0A0A] md:hidden overflow-y-auto"
+          className="fixed inset-0 top-16 z-40 bg-background md:hidden overflow-y-auto"
         >
           <nav className="flex flex-col">
             {allNavItems.map(({ href, label }) => (
@@ -154,8 +154,8 @@ export function TopNav() {
                 className={cn(
                   "flex items-center h-13 px-6 text-[15px] font-medium border-b border-surface-container transition-colors",
                   isActive(href)
-                    ? "text-[#FF6A00] bg-[#FF6A00]/5 border-l-2 border-l-[#FF6A00]"
-                    : "text-[#9CA3AF] hover:text-[#E6E6E6] hover:bg-white/3"
+                    ? "text-primary bg-primary/5 border-l-2 border-l-primary"
+                    : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container"
                 )}
               >
                 {label}
@@ -167,15 +167,15 @@ export function TopNav() {
               className={cn(
                 "flex items-center h-13 px-6 text-[15px] font-medium border-b border-surface-container transition-colors",
                 isActive("/settings")
-                  ? "text-[#FF6A00] bg-[#FF6A00]/5 border-l-2 border-l-[#FF6A00]"
-                  : "text-[#9CA3AF] hover:text-[#E6E6E6] hover:bg-white/3"
+                  ? "text-primary bg-primary/5 border-l-2 border-l-primary"
+                  : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container"
               )}
             >
               Settings
             </Link>
           </nav>
 
-          <div className="flex items-center gap-2 px-6 py-4 text-[12px] text-[#9CA3AF] border-t border-[#1A1A1A] mt-2">
+          <div className="flex items-center gap-2 px-6 py-4 text-[12px] text-on-surface-variant border-t border-outline-variant mt-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa/128/color/eth.png"

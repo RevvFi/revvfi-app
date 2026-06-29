@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAccount } from "wagmi";
+import { WalletPrompt } from "@/components/wallet-gate";
 import {
   useBorrower,
   useBorrowerRisk,
@@ -278,6 +279,15 @@ function BorrowContent() {
       amount: withdrawAmount,
     });
     setWithdrawAmount("");
+  }
+
+  if (!address) {
+    return (
+      <WalletPrompt
+        title="Connect your wallet"
+        description="Connect your wallet to access the borrow portal, deposit collateral, and manage your loans."
+      />
+    );
   }
 
   return (

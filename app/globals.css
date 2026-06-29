@@ -258,6 +258,24 @@ body {
   background-color: rgba(255,255,255,0.03);
 }
 
+/* ── Ghost wallet-gate image ──────────────────────────────────────────────── */
+
+.ghost-float {
+  filter: drop-shadow(0 8px 28px rgba(255,106,0,0.22));
+}
+
+[data-theme="light"] .ghost-float {
+  filter: drop-shadow(0 8px 28px rgba(255,106,0,0.30));
+}
+
+/* ── Float animation ──────────────────────────────────────────────────────── */
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-10px); }
+}
+.animate-float { animation: float 3.5s ease-in-out infinite; }
+
 /* ── cmdk command palette ─────────────────────────────────────────────────── */
 
 [cmdk-input] { all: unset; }

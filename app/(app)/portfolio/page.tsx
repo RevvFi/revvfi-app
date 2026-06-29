@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAccount } from "wagmi";
+import { WalletGate } from "@/components/wallet-gate";
 import { usePositions, useClaimPosition, useWithdrawals, useCancelWithdrawal, useClaimWithdrawal } from "@/hooks/usePositions";
 import { useOffers, useCancelOffer } from "@/hooks/useOffers";
 import { useCompletePortfolio } from "@/hooks/usePortfolioData";
@@ -103,6 +104,7 @@ export default function PortfolioPage() {
   }, [positions]);
 
   return (
+    <WalletGate title="Connect your wallet" description="Connect your wallet to view your lending positions, offers, withdrawals, and portfolio allocation.">
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-350 mx-auto">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -648,5 +650,6 @@ export default function PortfolioPage() {
         </Tabs>
       </Card>
     </div>
+    </WalletGate>
   );
 }

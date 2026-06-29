@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAccount } from "wagmi";
+import { WalletGate } from "@/components/wallet-gate";
 import { useOffers, useCreateOffer, useCancelOffer } from "@/hooks/useOffers";
 import { usePortfolio } from "@/hooks/usePositions";
 import { useMarkets } from "@/hooks/useMarkets";
@@ -66,6 +67,7 @@ export default function LendPage() {
   const avgAPR = portfolio?.avg_apr ?? 0;
 
   return (
+    <WalletGate title="Connect your wallet" description="Connect your wallet to create lending offers and start earning interest on your assets.">
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-350 mx-auto">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -302,5 +304,6 @@ export default function LendPage() {
         </div>
       </div>
     </div>
+    </WalletGate>
   );
 }

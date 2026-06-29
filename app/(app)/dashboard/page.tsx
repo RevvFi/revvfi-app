@@ -1,6 +1,7 @@
 "use client";
 
 import { useAccount } from "wagmi";
+import { WalletGate } from "@/components/wallet-gate";
 import { usePortfolio, usePositions } from "@/hooks/usePositions";
 import { useMarkets } from "@/hooks/useMarkets";
 import { useLiquidations } from "@/hooks/useAuctions";
@@ -53,6 +54,10 @@ export default function DashboardPage() {
     : 0;
 
   return (
+    <WalletGate
+      title="Connect your wallet"
+      description="Connect your wallet to view your portfolio, positions, health factor, and real-time performance metrics."
+    >
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-350 mx-auto">
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
@@ -419,5 +424,6 @@ export default function DashboardPage() {
         </Card>
       </div>
     </div>
+    </WalletGate>
   );
 }

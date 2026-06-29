@@ -61,7 +61,7 @@ export function TopNav() {
         {/* Logo */}
         <Link
           href="/dashboard"
-          className="flex items-center gap-2 px-4 border-r border-outline-variant shrink-0 hover:bg-surface-container transition-colors"
+          className="flex items-center gap-2 px-4 shrink-0 hover:bg-surface-container transition-colors"
         >
           <Image
             src="/favicon-96x96.png"
@@ -86,7 +86,7 @@ export function TopNav() {
         </nav>
 
         {/* Right side */}
-        <div className="flex items-center gap-1 px-3 ml-auto border-l border-outline-variant shrink-0">
+        <div className="flex items-center gap-1 px-3 ml-auto shrink-0">
           {/* ⌘K search trigger — desktop only */}
           <button
             onClick={openSearch}

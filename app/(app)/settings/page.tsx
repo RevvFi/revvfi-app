@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useAccount, useDisconnect } from "wagmi";
+import { WalletPrompt } from "@/components/wallet-gate";
 import { useAuthStore } from "@/store/auth.store";
 import { useSIWE } from "@/hooks/useAuth";
 import { useMyOffers, useCancelOffer } from "@/hooks/useOffers";
@@ -55,13 +56,10 @@ export default function SettingsPage() {
 
   if (!isConnected) {
     return (
-      <div className="p-4 sm:p-6 flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <div className="h-16 w-16 rounded-full bg-surface-container flex items-center justify-center">
-          <Wallet className="h-8 w-8 text-on-surface-variant" />
-        </div>
-        <p className="text-lg font-semibold text-on-surface">Wallet not connected</p>
-        <p className="text-sm text-on-surface-variant">Connect your wallet to view settings</p>
-      </div>
+      <WalletPrompt
+        title="Connect your wallet"
+        description="Connect your wallet to manage your account, preferences, offers, and auction bids."
+      />
     );
   }
 

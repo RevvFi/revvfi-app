@@ -86,30 +86,38 @@ export function TopNav() {
         </nav>
 
         {/* Right side */}
-        <div className="flex items-center gap-1 px-3 ml-auto shrink-0">
-          {/* ⌘K search trigger — desktop only */}
+        <div className="flex items-center gap-2 px-3 ml-auto shrink-0">
+          {/* Search icon — mobile + tablet (< lg) */}
           <button
             onClick={openSearch}
-            className="hidden lg:flex items-center gap-2 h-7 px-2.5 rounded border border-outline-variant text-[11px] text-on-surface-variant hover:text-on-surface hover:border-[#2D2D2D] transition-colors mr-1 select-none"
+            className="flex lg:hidden items-center justify-center h-8 w-8 rounded-full border border-outline-variant text-on-surface-variant hover:text-on-surface hover:border-outline transition-colors shrink-0"
             title="Search (⌘K)"
           >
-            <Search className="h-3 w-3" />
-            <span>Search</span>
-            <kbd className="rounded bg-outline-variant px-1 py-0.5 text-[10px]">⌘K</kbd>
+            <Search className="h-4 w-4" />
           </button>
 
-          {/* Network pill — large screens only */}
-          <div className="hidden lg:flex items-center gap-1.5 px-2.5 h-7 rounded border border-outline-variant text-[11px] font-medium text-on-surface-variant select-none mr-1">
+          {/* Search bar — desktop (lg+) */}
+          <button
+            onClick={openSearch}
+            className="hidden lg:flex items-center gap-2.5 h-9 px-4 rounded-full border border-outline-variant text-[13px] text-on-surface-variant hover:text-on-surface hover:border-outline transition-colors select-none w-44 xl:w-64 2xl:w-80"
+            title="Search (⌘K)"
+          >
+            <Search className="h-4 w-4 shrink-0" />
+            <span>Search</span>
+            <kbd className="ml-auto rounded-md bg-surface-container-high px-1.5 py-0.5 text-[10px] font-mono leading-none">⌘K</kbd>
+          </button>
+
+          {/* Network badge — icon + status dot only, no text */}
+          <div className="hidden lg:flex items-center gap-1.5 h-8 px-2.5 rounded-full border border-outline-variant select-none">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa/128/color/eth.png"
-              alt="ETH"
-              width={14}
-              height={14}
+              alt="Ethereum"
+              width={16}
+              height={16}
               className="rounded-full object-contain"
             />
-            <span className="h-1.5 w-1.5 rounded-full bg-[#22C55E] pulse-dot" />
-            Ethereum
+            <span className="h-1.5 w-1.5 rounded-full bg-[#22C55E] pulse-dot shrink-0" />
           </div>
 
           {/* Settings */}
@@ -117,13 +125,13 @@ export function TopNav() {
             href="/settings"
             title="Settings"
             className={cn(
-              "h-8 w-8 flex items-center justify-center rounded transition-colors",
+              "h-8 w-8 flex items-center justify-center rounded-full transition-colors shrink-0",
               isActive("/settings")
                 ? "text-primary"
                 : "text-on-surface-variant hover:text-on-surface"
             )}
           >
-            <Settings className="h-3.75 w-3.75" />
+            <Settings className="h-4.5 w-4.5" />
           </Link>
 
           {/* Wallet */}
@@ -132,7 +140,7 @@ export function TopNav() {
           {/* Hamburger — mobile only */}
           <button
             onClick={() => setMobileOpen((o) => !o)}
-            className="md:hidden ml-1 h-8 w-8 flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors"
+            className="md:hidden h-8 w-8 flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors shrink-0"
             aria-label="Toggle navigation"
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}

@@ -33,8 +33,18 @@ export function MarketSelector({
 
   if (filterByBorrower && address) {
     markets = markets.filter((m) => m.borrower.toLowerCase() === address.toLowerCase());
-  } else if (filterByLender && address) {
-    markets = markets.filter((m) => m.borrower.toLowerCase() !== address.toLowerCase());
+  } else {
+    if (filterByLender && address) {
+      markets = markets.filter((m) => m.borrower.toLowerCase() !== address.toLowerCase());
+    }
+    // A market mid-liquidation (auction running, not yet settled) still
+    // technically accepts new offers on-chain - there's no contract-level
+    // guard against it - but that liquidity would just sit unused until
+    // the auction resolves, since the borrower can't draw down while
+    // isLiquidating is true. Exclude it from new-offer selection (this
+    // branch is only reached for lender-facing usage, not filterByBorrower)
+    // so lenders aren't parking funds in a market that's paused for now.
+    markets = markets.filter((m) => !m.is_liquidating);
   }
 
   const selectedMarket = markets.find((m) => m.address === value);
@@ -67,12 +77,12 @@ export function MarketSelector({
             {selectedMarket && (
               <div className="flex items-center gap-2">
                 <TokenPair
-                  from={selectedMarket.collateral_asset.symbol}
-                  to={selectedMarket.borrow_asset.symbol}
+                  from={selectedMarket.borrow_asset.symbol}
+                  to={selectedMarket.collateral_asset.symbol}
                   size="xs"
                 />
                 <span>
-                  {selectedMarket.collateral_asset.symbol} → {selectedMarket.borrow_asset.symbol}
+                  {selectedMarket.borrow_asset.symbol} / {selectedMarket.collateral_asset.symbol}
                 </span>
                 <span className="text-xs text-on-surface-variant mono hidden sm:block">
                   {formatAddress(selectedMarket.address)}
@@ -86,12 +96,12 @@ export function MarketSelector({
             <SelectItem key={market.address} value={market.address}>
               <div className="flex items-center gap-2 py-0.5">
                 <TokenPair
-                  from={market.collateral_asset.symbol}
-                  to={market.borrow_asset.symbol}
+                  from={market.borrow_asset.symbol}
+                  to={market.collateral_asset.symbol}
                   size="xs"
                 />
                 <span className="font-medium">
-                  {market.collateral_asset.symbol} → {market.borrow_asset.symbol}
+                  {market.borrow_asset.symbol} / {market.collateral_asset.symbol}
                 </span>
                 <span className="text-xs text-on-surface-variant mono">
                   {formatAddress(market.address)}

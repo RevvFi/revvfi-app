@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useLiquidations, useCountdown, usePlaceBid, useSettleAuction, useCanSettle } from "@/hooks/useAuctions";
-import { useDutchAuctionPrice } from "@/hooks/useLiquidation";
+import { useDutchAuctionPrice, useTriggerLiquidation } from "@/hooks/useLiquidation";
+import { useAtRiskMarkets } from "@/hooks/useAtRiskMarkets";
+import { CONTRACT_ADDRESSES } from "@/lib/contracts/addresses";
 import { useAccount } from "wagmi";
 import { AuctionCard } from "./_components/AuctionCard";
 import { BidHistoryCard } from "./_components/BidHistoryCard";
@@ -11,12 +14,67 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { formatAddress, formatCountdown, fmtUSD } from "@/lib/utils";
+import { formatAddress, formatCountdown, fmtUSD, formatTokenAmount } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
-import { Filter, History, Zap, ShieldCheck, Gavel, TrendingDown, Activity, Trophy, Award, CheckCircle, Loader2 } from "lucide-react";
+import { Filter, History, Zap, ShieldCheck, Gavel, TrendingDown, Activity, Trophy, Award, CheckCircle, Loader2, AlertTriangle } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatUnits } from "viem";
 import type { Auction } from "@/types";
+
+// ─── At-risk positions (liquidatable, not yet auctioned) ──────────────────────
+
+function AtRiskPositionsPanel() {
+  const { atRiskMarkets, isLoading } = useAtRiskMarkets();
+  const triggerLiquidation = useTriggerLiquidation();
+
+  if (isLoading) return null;
+  if (atRiskMarkets.length === 0) return null;
+
+  return (
+    <Card className="p-4 border-red-500/30 bg-red-500/5">
+      <div className="flex items-center gap-2 mb-3">
+        <AlertTriangle className="h-4 w-4 text-red-400" />
+        <p className="text-xs font-semibold uppercase tracking-widest text-red-400">
+          At-Risk Positions ({atRiskMarkets.length}) — Not Yet Auctioned
+        </p>
+      </div>
+      <p className="text-xs text-on-surface-variant mb-3">
+        These markets are currently below their liquidation threshold. Anyone can trigger
+        liquidation to start a Dutch auction — the debt gets repaid and the collateral goes
+        to whoever wins the auction at the decayed price.
+      </p>
+      <div className="space-y-2">
+        {atRiskMarkets.map(({ market }) => (
+          <div
+            key={market.address}
+            className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-low p-3"
+          >
+            <div className="min-w-0">
+              <Link href={`/markets/${market.address}`} className="text-sm font-semibold text-on-surface hover:underline">
+                {market.borrow_asset.symbol} / {market.collateral_asset.symbol}
+              </Link>
+              <p className="text-xs text-on-surface-variant mono truncate">
+                {formatAddress(market.address)} · Borrower {formatAddress(market.borrower)}
+              </p>
+              <p className="text-xs text-red-400 mt-0.5">
+                Owes {formatTokenAmount(market.total_debt, market.borrow_asset.decimals)} {market.borrow_asset.symbol}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="shrink-0 gap-1.5"
+              onClick={() => triggerLiquidation.mutate({ marketAddress: market.address as `0x${string}` })}
+              loading={triggerLiquidation.isPending}
+            >
+              <Gavel className="h-3.5 w-3.5" /> Trigger Liquidation
+            </Button>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
 const PROTECTIONS = [
   { label: "Dutch Auction Mechanism", desc: "Price decays linearly — first bid wins all collateral.", ok: true },
@@ -61,15 +119,13 @@ function AuctionDetailPanel({
   async function handleBid() {
     if (!bidAmount || parseFloat(bidAmount) <= 0) return;
 
-    // TEMPORARY: Hardcode USDC address until backend returns asset info
-    const USDC_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
-    const USDC_DECIMALS = 6;
-
+    // Falls back to the env-driven USDC address/decimals only if the backend
+    // didn't return asset info for this auction.
     await placeBid.mutateAsync({
       auctionId: auction.auction_id,
       bidAmount,
-      borrowAssetAddress: auction.borrow_asset?.address || USDC_ADDRESS,
-      borrowAssetDecimals: auction.borrow_asset?.decimals || USDC_DECIMALS,
+      borrowAssetAddress: auction.borrow_asset?.address || CONTRACT_ADDRESSES.usdc,
+      borrowAssetDecimals: auction.borrow_asset?.decimals || 6,
     });
     setBidAmount("");
   }
@@ -281,6 +337,8 @@ export default function AuctionsPage() {
         </div>
       </div>
 
+      <AtRiskPositionsPanel />
+
       {isLoading ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-4">
@@ -375,7 +433,11 @@ export default function AuctionsPage() {
 
           {/* ── Right: Sidebar ── */}
           <div className="space-y-4">
-            <BidHistoryCard auctionId={selectedId} />
+            <BidHistoryCard
+              auctionId={selectedId}
+              debtDecimals={selectedAuction?.borrow_asset?.decimals}
+              debtSymbol={selectedAuction?.borrow_asset?.symbol}
+            />
 
             {/* Auction selector list when multiple */}
             {auctions.length > 1 && (

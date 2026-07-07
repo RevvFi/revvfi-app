@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatAddress } from "@/lib/utils";
+import { formatAddress, formatTokenAmount } from "@/lib/utils";
 import { auctionService } from "@/services/auction.service";
 import type { AuctionBid } from "@/types";
 
@@ -14,7 +14,15 @@ function formatTimeAgo(unixSeconds: number): string {
   return `${Math.floor(diff / 3600)}h ago`;
 }
 
-export function BidHistoryCard({ auctionId }: { auctionId: number | null }) {
+export function BidHistoryCard({
+  auctionId,
+  debtDecimals = 6,
+  debtSymbol = "USDC",
+}: {
+  auctionId: number | null;
+  debtDecimals?: number;
+  debtSymbol?: string;
+}) {
   const { data, isLoading } = useQuery({
     queryKey: ["auction-bids", auctionId],
     queryFn: async () => {
@@ -54,7 +62,7 @@ export function BidHistoryCard({ auctionId }: { auctionId: number | null }) {
       ) : (
         <div className="space-y-3">
           {bids.map((bid: AuctionBid) => {
-            const amountFormatted = (parseFloat(bid.amount) / 1e6).toFixed(2);
+            const amountFormatted = formatTokenAmount(bid.amount, debtDecimals);
             return (
               <div key={bid.bid_id} className="flex items-center gap-2">
                 <div className="h-8 w-8 rounded-full bg-outline-variant/20 flex items-center justify-center text-xs text-on-surface-variant shrink-0 font-bold">
@@ -69,8 +77,8 @@ export function BidHistoryCard({ auctionId }: { auctionId: number | null }) {
                   </p>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-xs font-bold text-emerald-400 mono">${amountFormatted}</p>
-                  <p className="text-[10px] text-on-surface-variant">USDC</p>
+                  <p className="text-xs font-bold text-emerald-400 mono">{amountFormatted}</p>
+                  <p className="text-[10px] text-on-surface-variant">{debtSymbol}</p>
                 </div>
               </div>
             );

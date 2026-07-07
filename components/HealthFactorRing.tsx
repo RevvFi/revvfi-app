@@ -16,6 +16,11 @@ function hfStyle(hf: number) {
   return              { stroke: "#f87171", track: "#2a1010", text: "text-red-400",    label: "At Risk" };
 }
 
+// Used when the on-chain health-factor read fails (e.g. stale oracle) instead
+// of silently falling back to a possibly-wrong cached number with full
+// visual confidence.
+const HF_UNKNOWN_STYLE = { stroke: "#6b7280", track: "#2a2a2a", text: "text-on-surface-variant", label: "Unable to Verify" };
+
 const SIZES = {
   sm: { wrap: "h-16 w-16", num: "text-sm",  lbl: "text-[9px]"  },
   md: { wrap: "h-24 w-24", num: "text-xl",  lbl: "text-[10px]" },
@@ -25,16 +30,20 @@ const SIZES = {
 interface HealthFactorRingProps {
   /** Raw health factor value (0 = no position / no data) */
   value: number;
+  /** True when the on-chain read failed (e.g. stale oracle) — shows an
+   *  explicit "unable to verify" state instead of trusting `value`, which
+   *  may be a stale/wrong cached fallback. */
+  error?: boolean;
   size?: keyof typeof SIZES;
   className?: string;
 }
 
-export function HealthFactorRing({ value, size = "md", className }: HealthFactorRingProps) {
+export function HealthFactorRing({ value, error = false, size = "md", className }: HealthFactorRingProps) {
   const { wrap, num, lbl } = SIZES[size];
-  const { stroke, track, text, label } = hfStyle(value);
+  const { stroke, track, text, label } = error ? HF_UNKNOWN_STYLE : hfStyle(value);
 
   // Scale 0 → 3.0 HF to 0 → 100% ring fill, capped at 100%
-  const pct   = value <= 0 ? 0 : Math.min(value / 3, 1);
+  const pct   = error || value <= 0 ? 0 : Math.min(value / 3, 1);
   const filled = CIRC * pct;
   const empty  = CIRC - filled;
 
@@ -58,7 +67,7 @@ export function HealthFactorRing({ value, size = "md", className }: HealthFactor
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
           <span className={cn("font-bold mono leading-none", num, text)}>
-            {value <= 0 ? "—" : value.toFixed(2)}
+            {error ? "?" : value <= 0 ? "—" : value.toFixed(2)}
           </span>
         </div>
       </div>

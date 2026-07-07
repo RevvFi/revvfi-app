@@ -1,5 +1,7 @@
+import { useMemo } from 'react';
 import { useReadContract } from 'wagmi';
 import { Address } from 'viem';
+import { localChain } from '@/constants/chains';
 
 const ESCROW_ABI = [
   {
@@ -13,6 +15,50 @@ const ESCROW_ABI = [
     "inputs": [],
     "name": "minCollateralRatio",
     "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "collateralOracle",
+    "outputs": [{"internalType": "address", "name": "", "type": "address"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "collateralOracleDecimals",
+    "outputs": [{"internalType": "uint8", "name": "", "type": "uint8"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "collateralDecimals",
+    "outputs": [{"internalType": "uint8", "name": "", "type": "uint8"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "borrowDecimals",
+    "outputs": [{"internalType": "uint8", "name": "", "type": "uint8"}],
+    "stateMutability": "view",
+    "type": "function"
+  }
+] as const;
+
+const ORACLE_ABI = [
+  {
+    "inputs": [],
+    "name": "latestRoundData",
+    "outputs": [
+      {"internalType": "uint80", "name": "roundId", "type": "uint80"},
+      {"internalType": "int256", "name": "answer", "type": "int256"},
+      {"internalType": "uint256", "name": "startedAt", "type": "uint256"},
+      {"internalType": "uint256", "name": "updatedAt", "type": "uint256"},
+      {"internalType": "uint80", "name": "answeredInRound", "type": "uint80"}
+    ],
     "stateMutability": "view",
     "type": "function"
   }
@@ -32,6 +78,13 @@ const MARKET_ABI = [
     "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
     "stateMutability": "view",
     "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getCurrentPrincipal",
+    "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function"
   }
 ] as const;
 
@@ -42,6 +95,7 @@ export function useMarketCollateralBalance(marketAddress: Address | undefined, b
     abi: MARKET_ABI,
     functionName: 'collateralEscrow',
     query: { enabled: !!marketAddress },
+    chainId: localChain.id,
   });
 
   return useReadContract({
@@ -53,6 +107,7 @@ export function useMarketCollateralBalance(marketAddress: Address | undefined, b
       enabled: !!escrowAddress && !!borrowerAddress,
       refetchInterval: 15_000,
     },
+    chainId: localChain.id,
   });
 }
 
@@ -63,6 +118,7 @@ export function useMinCollateralRatio(marketAddress: Address | undefined) {
     abi: MARKET_ABI,
     functionName: 'collateralEscrow',
     query: { enabled: !!marketAddress },
+    chainId: localChain.id,
   });
 
   return useReadContract({
@@ -73,6 +129,7 @@ export function useMinCollateralRatio(marketAddress: Address | undefined) {
       enabled: !!escrowAddress,
       refetchInterval: 60_000, // ratio rarely changes
     },
+    chainId: localChain.id,
   });
 }
 
@@ -86,19 +143,99 @@ export function useMarketTotalDebt(marketAddress: Address | undefined) {
       enabled: !!marketAddress,
       refetchInterval: 15_000,
     },
+    chainId: localChain.id,
   });
 }
 
-// Calculate max borrow amount.
-// Returns a value in the borrow asset's native units (e.g. USDC with 6 decimals).
-//
-// Unit walk-through (1 WETH @ $2000, minRatio = 110%, no existing debt):
-//   collateralBalance = 1e18  (18-decimal WETH)
-//   collateralPrice   = 2000 * 1e8 = 2e11  (8-decimal Chainlink price)
-//
-//   collateralValue (8-decimal USD) = 1e18 * 2e11 / 1e18 = 2e11
-//   collateralValue (6-decimal USDC) = 2e11 / 100        = 2e9  ($2000)
-//   maxBorrow (6-decimal USDC) = 2e9 * 10000 / 11000     ≈ 1.818e9  ($1818)
+// Same scope as useMarketTotalDebt, so (totalDebt - currentPrincipal) gives accrued interest.
+export function useMarketCurrentPrincipal(marketAddress: Address | undefined) {
+  return useReadContract({
+    address: marketAddress,
+    abi: MARKET_ABI,
+    functionName: 'getCurrentPrincipal',
+    query: {
+      enabled: !!marketAddress,
+      refetchInterval: 15_000,
+    },
+    chainId: localChain.id,
+  });
+}
+
+// Mirrors RevvFiCollateralEscrow._getCollateralValueFromAmount() - returns a
+// converter to the market's borrow-asset units, using its real oracle/decimals.
+export function useCollateralOracleConverter(marketAddress: Address | undefined) {
+  const { data: escrowAddress } = useReadContract({
+    address: marketAddress,
+    abi: MARKET_ABI,
+    functionName: 'collateralEscrow',
+    query: { enabled: !!marketAddress },
+    chainId: localChain.id,
+  });
+
+  const { data: oracleAddress } = useReadContract({
+    address: escrowAddress as Address,
+    abi: ESCROW_ABI,
+    functionName: 'collateralOracle',
+    query: { enabled: !!escrowAddress },
+    chainId: localChain.id,
+  });
+  const { data: oracleDecimals } = useReadContract({
+    address: escrowAddress as Address,
+    abi: ESCROW_ABI,
+    functionName: 'collateralOracleDecimals',
+    query: { enabled: !!escrowAddress },
+    chainId: localChain.id,
+  });
+  const { data: collateralDecimals } = useReadContract({
+    address: escrowAddress as Address,
+    abi: ESCROW_ABI,
+    functionName: 'collateralDecimals',
+    query: { enabled: !!escrowAddress },
+    chainId: localChain.id,
+  });
+  const { data: borrowDecimals } = useReadContract({
+    address: escrowAddress as Address,
+    abi: ESCROW_ABI,
+    functionName: 'borrowDecimals',
+    query: { enabled: !!escrowAddress },
+    chainId: localChain.id,
+  });
+  const { data: roundData } = useReadContract({
+    address: oracleAddress as Address,
+    abi: ORACLE_ABI,
+    functionName: 'latestRoundData',
+    query: { enabled: !!oracleAddress, refetchInterval: 15_000 },
+    chainId: localChain.id,
+  });
+
+  const ready =
+    roundData !== undefined &&
+    oracleDecimals !== undefined &&
+    collateralDecimals !== undefined &&
+    borrowDecimals !== undefined;
+
+  // amountWei is the collateral amount in its own raw decimals (e.g. 18 for WETH)
+  const toBorrowUnits = useMemo(() => {
+    if (!ready) return null;
+    const price = (roundData as readonly [bigint, bigint, bigint, bigint, bigint])[1];
+    return (amountWei: bigint): bigint => {
+      if (amountWei === BigInt(0) || price <= BigInt(0)) return BigInt(0);
+      let value = amountWei * price;
+      if (oracleDecimals! > borrowDecimals!) {
+        value /= BigInt(10) ** BigInt(oracleDecimals! - borrowDecimals!);
+      } else if (oracleDecimals! < borrowDecimals!) {
+        value *= BigInt(10) ** BigInt(borrowDecimals! - oracleDecimals!);
+      }
+      return value / (BigInt(10) ** BigInt(collateralDecimals!));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, roundData, oracleDecimals, collateralDecimals, borrowDecimals]);
+
+  return { toBorrowUnits, ready };
+}
+
+// Returns max borrow amount in the borrow asset's native units, converting
+// the 8-decimal Chainlink price and collateral decimals down to borrow decimals.
 export function calculateMaxBorrow(
   collateralBalance: bigint,
   collateralPrice: bigint,    // Chainlink-style: 8 decimal places (e.g. $2000 → 200_000_000_00)

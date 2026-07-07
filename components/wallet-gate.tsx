@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useAccount, useConnect } from "wagmi";
+import { markExplicitConnectIntent } from "@/lib/connect-intent";
 
 interface WalletGateProps {
   children: React.ReactNode;
@@ -38,6 +39,17 @@ export function WalletPrompt({
   const injected = connectors.find((c) => c.name.toLowerCase().includes("metamask") || c.type === "injected");
   const first = injected ?? connectors[0];
 
+  // Sign-in (SIWE) is triggered centrally by AuthWalletSync, gated on the
+  // explicit-connect-intent flag marked here - this component unmounts
+  // itself the instant isConnected flips true (WalletGate swaps to
+  // rendering its children), so a local onSuccess callback here would never
+  // reliably fire.
+  function handleConnect() {
+    if (!first) return;
+    markExplicitConnectIntent();
+    connect({ connector: first });
+  }
+
   return (
     <div
       className={`flex flex-col items-center justify-center px-6 text-center ${
@@ -69,7 +81,7 @@ export function WalletPrompt({
 
       {/* CTA */}
       <button
-        onClick={() => first && connect({ connector: first })}
+        onClick={handleConnect}
         disabled={isPending || !first}
         className="relative h-12 px-10 rounded-full text-sm font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.03] active:scale-[0.98]"
         style={{

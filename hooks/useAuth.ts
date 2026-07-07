@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAccount, useSignMessage, useDisconnect } from "wagmi";
 import { SiweMessage } from "siwe";
@@ -7,6 +8,7 @@ import { toast } from "sonner";
 import { authService } from "@/services/auth.service";
 import { useAuthStore } from "@/store/auth.store";
 import { queryKeys } from "@/constants/query-keys";
+import { localChain } from "@/constants/chains";
 
 export function useAuthSession() {
   const { token } = useAuthStore();
@@ -21,7 +23,15 @@ export function useAuthSession() {
     throwOnError: false,
   });
 
-  if (me) setUser(me);
+  // Must run in an effect, not directly in the render body: calling a
+  // zustand setter unconditionally on every render re-triggers a state
+  // update -> re-render -> setter call again, an infinite loop. This was
+  // previously harmless because useAuthSession was never actually mounted
+  // anywhere; wiring it into AuthWalletSync (global) turned this into a
+  // page-hanging infinite render loop the moment a wallet connects.
+  useEffect(() => {
+    if (me) setUser(me);
+  }, [me, setUser]);
 
   return { me, isLoading };
 }
@@ -46,7 +56,7 @@ export function useSIWE() {
         statement: "Sign in to RevvFi Institutional DeFi Platform",
         uri: window.location.origin,
         version: "1",
-        chainId: 31337,
+        chainId: chain?.id ?? localChain.id,
         nonce: nonceResp.nonce,
       });
       const message = siweMsg.prepareMessage();

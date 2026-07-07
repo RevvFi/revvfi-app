@@ -5,13 +5,22 @@ import { WagmiProvider } from "wagmi";
 import { Toaster } from "sonner";
 import { wagmiConfig } from "./wagmi-config";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AuthWalletSync } from "@/components/AuthWalletSync";
 
 function makeQueryClient() {
   return new QueryClient({
     defaultOptions: {
       queries: {
         staleTime: 30_000,
-        retry: 2,
+        // Don't retry 4xx client errors (e.g. 404 "not a borrower") - the
+        // request won't succeed on retry, it just triples request volume
+        // and delays the UI settling into its "not found" state. Still
+        // retry everything else (network errors, 5xx) up to twice.
+        retry: (failureCount, error) => {
+          const status = (error as { status?: number })?.status;
+          if (status && status >= 400 && status < 500) return false;
+          return failureCount < 2;
+        },
         refetchOnWindowFocus: false,
       },
     },
@@ -33,6 +42,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <ThemeProvider>
       <WagmiProvider config={wagmiConfig}>
         <QueryClientProvider client={queryClient}>
+          <AuthWalletSync />
           {children}
           <Toaster
             position="bottom-right"

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useAuthStore } from "@/store/auth.store";
 import { useSIWE } from "@/hooks/useAuth";
+import { markExplicitConnectIntent } from "@/lib/connect-intent";
 import { usePortfolio } from "@/hooks/usePositions";
 import { formatAddress, fmtUSD } from "@/lib/utils";
 
@@ -53,9 +54,11 @@ export function ConnectWalletButton() {
   function handleConnect(connector: (typeof connectors)[number]) {
     localStorage.setItem(RECENT_KEY, connector.id);
     setOpen(false);
-    connect({ connector }, {
-      onSuccess: () => { if (!isAuthenticated) login(); },
-    });
+    // Sign-in is triggered centrally by AuthWalletSync, gated on the
+    // explicit-connect-intent flag marked here - avoids a double
+    // signature prompt if both a local trigger and the central one fired.
+    markExplicitConnectIntent();
+    connect({ connector });
   }
 
   // Deduplicate connectors by name

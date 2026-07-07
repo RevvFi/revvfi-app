@@ -13,7 +13,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { formatAddress, formatCountdown, fmtUSD } from "@/lib/utils";
+import { formatAddress, formatCountdown, fmtUSD, formatAssetAmounts } from "@/lib/utils";
+import { formatUnits } from "viem";
 import {
   AlertTriangle,
   Zap,
@@ -103,8 +104,8 @@ function ActiveAuctionCard({ auctionId, market }: { auctionId: number; market: M
   if (!auction) return null;
 
   const currentPrice = priceData?.current_price ?? auction.current_price;
-  const currentPriceNum = parseFloat(currentPrice) / 1e6;
-  const collateralNum = parseFloat(auction.collateral_amount) / 1e18;
+  const currentPriceNum = Number(formatUnits(BigInt(currentPrice || "0"), market.borrow_asset.decimals));
+  const collateralNum = Number(formatUnits(BigInt(auction.collateral_amount || "0"), market.collateral_asset.decimals));
   const isUrgent = remaining < 3600 && remaining > 0;
 
   async function handleBid() {
@@ -152,7 +153,7 @@ function ActiveAuctionCard({ auctionId, market }: { auctionId: number; market: M
         <div className="rounded-lg bg-blue-500/[0.08] p-3">
           <p className="text-xs text-blue-400 mb-1">Current Price</p>
           <p className="text-sm font-bold text-blue-300 mono">
-            ${currentPriceNum.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            {currentPriceNum.toLocaleString(undefined, { maximumFractionDigits: 2 })} {market.borrow_asset.symbol}
           </p>
           <div className="flex items-center gap-0.5 mt-0.5">
             <TrendingDown className="h-2.5 w-2.5 text-red-400" />
@@ -163,7 +164,7 @@ function ActiveAuctionCard({ auctionId, market }: { auctionId: number; market: M
           <p className="text-xs text-on-surface-variant mb-1">Highest Bid</p>
           <p className="text-sm font-bold text-on-surface mono">
             {parseFloat(auction.highest_bid) > 0
-              ? `$${(parseFloat(auction.highest_bid) / 1e6).toLocaleString()}`
+              ? `${Number(formatUnits(BigInt(auction.highest_bid), market.borrow_asset.decimals)).toLocaleString()} ${market.borrow_asset.symbol}`
               : "—"}
           </p>
         </div>
@@ -240,6 +241,20 @@ export default function LiquidationPage() {
   const hasAnything =
     liquidatableMarkets.length > 0 || activeAuctionMarkets.length > 0;
 
+  // Markets at risk can carry different borrow assets/decimals, so sum per
+  // asset symbol from each market's own total_debt rather than trusting the
+  // backend's single pre-blended liquidations.total_debt figure.
+  const totalDebtByAsset = (() => {
+    const bySymbol: Record<string, number> = {};
+    [...liquidatableMarkets, ...activeAuctionMarkets].forEach((m) => {
+      const amount = Number(formatUnits(BigInt(m.total_debt || "0"), m.borrow_asset.decimals));
+      bySymbol[m.borrow_asset.symbol] = (bySymbol[m.borrow_asset.symbol] ?? 0) + amount;
+    });
+    return Object.entries(bySymbol)
+      .filter(([, amount]) => amount !== 0)
+      .map(([symbol, amount]) => ({ symbol, amount }));
+  })();
+
   return (
     <div className="p-4 sm:p-6 space-y-6 max-w-350 mx-auto">
       {/* ── Header ──────────────────────────────────────────────── */}
@@ -263,13 +278,13 @@ export default function LiquidationPage() {
 
       {/* ── Stats strip ─────────────────────────────────────────── */}
       {isLoading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[...Array(4)].map((_, i) => (
+        <div className="grid grid-cols-3 gap-3">
+          {[...Array(3)].map((_, i) => (
             <Skeleton key={i} className="h-20 rounded-lg" />
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <StatChip
             label="Markets at Risk"
             value={liquidatableMarkets.length.toString()}
@@ -281,19 +296,7 @@ export default function LiquidationPage() {
           />
           <StatChip
             label="Total Debt at Risk"
-            value={
-              liquidations?.total_debt
-                ? `$${(parseFloat(liquidations.total_debt) / 1e6).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
-                : "—"
-            }
-          />
-          <StatChip
-            label="Total Collateral"
-            value={
-              liquidations?.total_collateral
-                ? `$${(parseFloat(liquidations.total_collateral) / 1e6).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
-                : "—"
-            }
+            value={formatAssetAmounts(totalDebtByAsset, 0)}
           />
         </div>
       )}

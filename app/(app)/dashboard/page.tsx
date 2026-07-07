@@ -6,6 +6,7 @@ import { usePortfolio, usePositions } from "@/hooks/usePositions";
 import { useMarkets } from "@/hooks/useMarkets";
 import { useLiquidations } from "@/hooks/useAuctions";
 import { useBorrower, useBorrowerRisk } from "@/hooks/useBorrower";
+import { useMyLenderPortfolio, useMyBorrowerPortfolio } from "@/hooks/usePortfolioData";
 import { Card } from "@/components/ui/card";
 import { CountUp } from "@/components/ui/count-up";
 import { StatusBadge } from "@/components/ui/badge";
@@ -13,27 +14,11 @@ import { Skeleton, SkeletonCard } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { HealthFactorRing } from "@/components/HealthFactorRing";
 import { TokenPair } from "@/components/TokenIcon";
-import { Sparkline } from "@/components/ui/sparkline";
 import { CopyButton } from "@/components/ui/copy-button";
-import { formatAddress, formatAPR, fmtUSD, reputationColor } from "@/lib/utils";
-import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell,
-} from "recharts";
+import { formatAddress, formatAPR, formatAssetAmounts, reputationColor } from "@/lib/utils";
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import Link from "next/link";
 import { ArrowUpRight, TrendingUp, Activity, Wallet, Shield, Zap, LayoutDashboard } from "lucide-react";
-
-const MOCK_PERF = [
-  { day: "Mon", value: 1200000 }, { day: "Tue", value: 1240000 },
-  { day: "Wed", value: 1210000 }, { day: "Thu", value: 1280000 },
-  { day: "Fri", value: 1350000 }, { day: "Sat", value: 1320000 },
-  { day: "Sun", value: 1284592 },
-];
-
-const MOCK_SPARKLINE = [
-  { value: 100 }, { value: 120 }, { value: 110 }, { value: 140 },
-  { value: 130 }, { value: 160 }, { value: 155 },
-];
 
 export default function DashboardPage() {
   const { address } = useAccount();
@@ -43,15 +28,11 @@ export default function DashboardPage() {
   const { data: liquidations } = useLiquidations();
   const { data: borrower } = useBorrower(address ?? "");
   const { data: risk } = useBorrowerRisk(address ?? "");
+  const lenderPortfolio = useMyLenderPortfolio(address);
+  const borrowerPortfolio = useMyBorrowerPortfolio(address);
 
-  const totalValue      = portfolio?.total_value ?? "0";
   const activePositions = portfolio?.active_positions ?? 0;
   const avgAPR          = portfolio?.avg_apr ?? 0;
-  const earnedInterest  = portfolio?.earned_interest ?? "0";
-
-  const outstandingDebt = borrower
-    ? (parseFloat(borrower.total_borrowed) - parseFloat(borrower.total_repaid))
-    : 0;
 
   return (
     <WalletGate
@@ -98,13 +79,11 @@ export default function DashboardPage() {
             <div className="flex flex-wrap gap-4 sm:gap-6 flex-1">
               <div>
                 <p className="text-xs text-on-surface-variant">Total Borrowed</p>
-                <p className="text-base font-bold mono text-on-surface">{fmtUSD(borrower.total_borrowed)}</p>
+                <p className="text-base font-bold mono text-on-surface">{formatAssetAmounts(borrowerPortfolio.totalPrincipal)}</p>
               </div>
               <div>
                 <p className="text-xs text-on-surface-variant">Outstanding Debt</p>
-                <p className="text-base font-bold mono text-on-surface">
-                  {outstandingDebt > 0 ? fmtUSD(outstandingDebt.toString(), 0) : "—"}
-                </p>
+                <p className="text-base font-bold mono text-on-surface">{formatAssetAmounts(borrowerPortfolio.totalDebt)}</p>
               </div>
               <div>
                 <p className="text-xs text-on-surface-variant">Active Loans</p>
@@ -137,15 +116,8 @@ export default function DashboardPage() {
             <div className="rounded-md border border-outline-variant/20 bg-surface-container p-4 hover:bg-surface-container-high transition-colors">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">Total Value</p>
               <div className="text-xl font-semibold text-on-surface mono">
-                <CountUp
-                  end={parseFloat(totalValue) / 1e6}
-                  duration={1.2}
-                  prefix="$"
-                  suffix="M"
-                  decimals={2}
-                />
+                {formatAssetAmounts(lenderPortfolio.totalPositionsValue)}
               </div>
-              <Sparkline data={MOCK_SPARKLINE} color="#FF6A00" className="h-8 mt-2" />
               <p className="text-xs text-on-surface-variant mt-1.5">Across all positions</p>
             </div>
             <div className="rounded-md border border-outline-variant/20 bg-surface-container p-4 hover:bg-surface-container-high transition-colors">
@@ -153,7 +125,6 @@ export default function DashboardPage() {
               <div className="text-xl font-semibold text-on-surface mono">
                 <CountUp end={activePositions} duration={1.0} decimals={0} />
               </div>
-              <Sparkline data={MOCK_SPARKLINE} color="#FF6A00" className="h-8 mt-2" />
               {portfolio?.settled_positions ? (
                 <p className="text-xs text-on-surface-variant mt-1.5">{portfolio.settled_positions} settled</p>
               ) : null}
@@ -163,78 +134,21 @@ export default function DashboardPage() {
               <div className="text-xl font-semibold text-on-surface mono">
                 <CountUp end={avgAPR / 100} duration={1.2} suffix="%" decimals={2} />
               </div>
-              <Sparkline data={MOCK_SPARKLINE} color="#FF6A00" className="h-8 mt-2" />
             </div>
             <div className="rounded-md border border-outline-variant/20 bg-surface-container p-4 hover:bg-surface-container-high transition-colors">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">Earned Interest</p>
               <div className="text-xl font-semibold text-on-surface mono">
-                <CountUp
-                  end={parseFloat(earnedInterest || "0") / 1e6}
-                  duration={1.2}
-                  prefix="$"
-                  suffix="M"
-                  decimals={4}
-                />
+                {formatAssetAmounts(lenderPortfolio.totalEarned, 4)}
               </div>
-              <Sparkline data={MOCK_SPARKLINE} color="#FF6A00" className="h-8 mt-2" />
               <p className="text-xs text-on-surface-variant mt-1.5">Accrued to date</p>
             </div>
           </>
         )}
       </div>
 
-      {/* ── Charts row ─────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-        {/* Performance Chart */}
-        <Card className="lg:col-span-2 p-5">
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
-                Portfolio Performance
-              </p>
-              <p className="text-xs text-on-surface-variant mt-0.5">Illustrative — live data connected once positions are active</p>
-            </div>
-            <div className="flex gap-1">
-              {["1D", "1W", "1M", "1Y"].map((t) => (
-                <button
-                  key={t}
-                  className={`px-2.5 py-1 text-xs rounded transition-colors ${t === "1W" ? "bg-primary-container/20 text-primary" : "text-on-surface-variant hover:text-on-surface"}`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
-          <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={MOCK_PERF} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#FF6A00" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#FF6A00" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-              <XAxis dataKey="day" tick={{ fill: "#9CA3AF", fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis hide />
-              <Tooltip
-                content={({ active, payload }) => {
-                  if (!active || !payload?.length) return null;
-                  return (
-                    <div className="rounded-lg border border-outline-variant/20 bg-surface-container-high px-3 py-2 shadow-lg text-xs">
-                      <p className="text-on-surface-variant mb-0.5">{payload[0].payload.day}</p>
-                      <p className="text-on-surface font-bold mono">${((payload[0].value as number) / 1e6).toFixed(3)}M</p>
-                    </div>
-                  );
-                }}
-              />
-              <Area type="monotone" dataKey="value" stroke="#FF6A00" strokeWidth={2} fill="url(#colorValue)" animationDuration={800} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </Card>
-
-        {/* Right column: Reputation + Quick Actions */}
-        <div className="space-y-4">
+      {/* ── Reputation + Quick Actions ─────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div>
           {/* Reputation card */}
           {borrower ? (
             <Card className="p-5">
@@ -288,8 +202,10 @@ export default function DashboardPage() {
               </div>
             </Card>
           )}
+        </div>
 
-          {/* Quick Actions */}
+        {/* Quick Actions */}
+        <div>
           <Card className="p-5">
             <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant mb-3">
               Quick Actions
@@ -403,10 +319,10 @@ export default function DashboardPage() {
                   className="flex items-center justify-between py-2.5 border-b border-outline-variant/10 last:border-0 hover:bg-white/[0.02] -mx-1 px-1 rounded transition-colors group"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <TokenPair from={m.collateral_asset.symbol} to={m.borrow_asset.symbol} size="xs" />
+                    <TokenPair from={m.borrow_asset.symbol} to={m.collateral_asset.symbol} size="xs" />
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-on-surface truncate">
-                        {m.collateral_asset.symbol} → {m.borrow_asset.symbol}
+                        {m.borrow_asset.symbol} / {m.collateral_asset.symbol}
                       </p>
                       <p className="text-xs text-on-surface-variant mono">{formatAddress(m.borrower)}</p>
                     </div>

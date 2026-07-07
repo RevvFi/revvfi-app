@@ -4,8 +4,9 @@ import { use, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAccount } from "wagmi";
 import { useMarket, useMarketMetrics } from "@/hooks/useMarkets";
+import { useMaxBorrowable } from "@/hooks/useMarketMetrics";
 import { useBorrower, useBorrowerRisk } from "@/hooks/useBorrower";
-import { useOffers } from "@/hooks/useOffers";
+import { useOffersForMarket } from "@/hooks/useOffers";
 import { usePositions } from "@/hooks/usePositions";
 import {
   useLiquidationStatus,
@@ -15,6 +16,7 @@ import {
   useIsLiquidating,
 } from "@/hooks/useLiquidation";
 import { usePlaceBid } from "@/hooks/useAuctions";
+import { useMarketCollateralBalance } from "@/hooks/useMarketCollateral";
 import { MarketParticipants } from "@/components/MarketParticipants";
 import { Card } from "@/components/ui/card";
 import { StatusBadge, RiskBadge } from "@/components/ui/badge";
@@ -25,18 +27,10 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, EmptySta
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
-import { formatAddress, formatAPR, formatTimestamp } from "@/lib/utils";
+import { formatAddress, formatAPR, formatTimestamp, formatTokenAmount } from "@/lib/utils";
 import { ArrowLeft, Share2, Plus, ExternalLink, Zap, AlertTriangle, Gavel, TrendingDown } from "lucide-react";
 import { TokenPair } from "@/components/TokenIcon";
-import {
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area,
-} from "recharts";
 import type { Address as EvmAddress } from "viem";
-
-const MOCK_LIQUIDITY = [
-  { time: "00:00", value: 4.2 }, { time: "06:00", value: 3.8 }, { time: "12:00", value: 5.1 },
-  { time: "18:00", value: 4.6 }, { time: "23:59", value: 4.8 },
-];
 
 export default function MarketDetailPage({ params }: { params: Promise<{ address: string }> }) {
   const { address } = use(params);
@@ -46,8 +40,13 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
   const { data: metrics } = useMarketMetrics(address);
   const { data: borrower } = useBorrower(market?.borrower ?? "");
   const { data: risk } = useBorrowerRisk(market?.borrower ?? "");
-  const { data: offers } = useOffers({ market_address: address });
+  const { data: offers } = useOffersForMarket(address);
   const { data: positionsData } = usePositions({ market_address: address });
+  const { data: collateralBalance } = useMarketCollateralBalance(
+    address as EvmAddress,
+    market?.borrower as EvmAddress | undefined
+  );
+  const { data: maxBorrowableWei } = useMaxBorrowable(address as EvmAddress);
 
   // Liquidation hooks
   const { data: liquidationStatus } = useLiquidationStatus(address);
@@ -116,9 +115,9 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
             <ArrowLeft className="h-3.5 w-3.5" /> Markets
           </Link>
           <div className="flex items-center gap-3 flex-wrap">
-            <TokenPair from={market.collateral_asset.symbol} to={market.borrow_asset.symbol} size="md" />
+            <TokenPair from={market.borrow_asset.symbol} to={market.collateral_asset.symbol} size="md" />
             <h1 className="text-2xl font-semibold text-on-surface">
-              {market.collateral_asset.symbol} → {market.borrow_asset.symbol} Market
+              {market.borrow_asset.symbol} / {market.collateral_asset.symbol} Market
             </h1>
             <StatusBadge status={market.is_active ? "active" : "inactive"} />
             {market.is_liquidating && <StatusBadge status="liquidating" />}
@@ -170,15 +169,15 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
           {
             label: "Total Debt",
             value: parseFloat(market.total_debt) > 0
-              ? `$${(parseFloat(market.total_debt) / 1e6).toFixed(2)}M`
+              ? formatTokenAmount(market.total_debt, market.borrow_asset.decimals)
               : "—",
-            sub: "USDC",
+            sub: market.borrow_asset.symbol,
             color: "text-on-surface",
           },
           {
-            label: "Collateral Value",
-            value: parseFloat(market.total_principal) > 0
-              ? `$${(parseFloat(market.total_principal) / 1e6).toFixed(2)}M`
+            label: "Collateral Locked",
+            value: collateralBalance && collateralBalance > BigInt(0)
+              ? formatTokenAmount(collateralBalance.toString(), market.collateral_asset.decimals)
               : "—",
             sub: market.collateral_asset.symbol,
             color: "text-on-surface",
@@ -186,9 +185,9 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
           {
             label: "Available Liquidity",
             value: parseFloat(market.total_liquidity) > 0
-              ? `$${(parseFloat(market.total_liquidity) / 1e6).toFixed(2)}M`
+              ? formatTokenAmount(market.total_liquidity, market.borrow_asset.decimals)
               : "—",
-            sub: "USDC to borrow",
+            sub: `${market.borrow_asset.symbol} to borrow`,
             color: "text-primary",
           },
           {
@@ -204,10 +203,15 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
             color: "text-on-surface",
           },
         ].map(({ label, value, sub, color }) => (
-          <Card key={label} className="p-4">
+          <Card key={label} className="p-4 min-w-0">
             <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant mb-1">{label}</p>
-            <p className={`text-xl font-bold ${color ?? "text-on-surface"}`}>{value}</p>
-            <p className="text-xs text-on-surface-variant mt-0.5">{sub}</p>
+            <p
+              className={`text-xl font-bold truncate ${color ?? "text-on-surface"}`}
+              title={String(value)}
+            >
+              {value}
+            </p>
+            <p className="text-xs text-on-surface-variant mt-0.5 truncate">{sub}</p>
           </Card>
         ))}
       </div>
@@ -294,16 +298,16 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
 
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
+                <div className="min-w-0">
                   <p className="text-xs text-on-surface-variant mb-1">Collateral Available</p>
-                  <p className="text-xl font-bold text-on-surface mono">
-                    {(parseFloat(activeAuction.collateral_amount) / 1e18).toFixed(4)} {market.collateral_asset.symbol}
+                  <p className="text-xl font-bold text-on-surface mono truncate">
+                    {formatTokenAmount(activeAuction.collateral_amount, market.collateral_asset.decimals, 4)} {market.collateral_asset.symbol}
                   </p>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-xs text-on-surface-variant mb-1">Debt to Cover</p>
-                  <p className="text-xl font-bold text-on-surface mono">
-                    {(parseFloat(activeAuction.debt_amount) / 1e6).toFixed(2)} USDC
+                  <p className="text-xl font-bold text-on-surface mono truncate">
+                    {formatTokenAmount(activeAuction.debt_amount, market.borrow_asset.decimals)} {market.borrow_asset.symbol}
                   </p>
                 </div>
               </div>
@@ -431,74 +435,98 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
             <div className="flex-1 space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-on-surface-variant">Available Liquidity</span>
-                <span className="mono text-on-surface">${(parseFloat(market.total_liquidity) / 1e6).toFixed(2)}M USDC</span>
+                <span className="mono text-on-surface">
+                  {formatTokenAmount(market.total_liquidity, market.borrow_asset.decimals)} {market.borrow_asset.symbol}
+                </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-on-surface-variant">Total Supplied</span>
-                <span className="mono text-on-surface">${(parseFloat(market.total_principal) / 1e6).toFixed(2)}M USDC</span>
+                <span className="mono text-on-surface">
+                  {formatTokenAmount(
+                    (BigInt(market.total_liquidity || "0") + BigInt(market.total_principal || "0")).toString(),
+                    market.borrow_asset.decimals
+                  )} {market.borrow_asset.symbol}
+                </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-on-surface-variant">Avg APR</span>
                 <span className="mono text-primary">{formatAPR(market.weighted_apr)}</span>
               </div>
+              {maxBorrowableWei !== undefined && maxBorrowableWei > BigInt(market.total_liquidity || "0") && (
+                <div className="flex justify-between text-sm pt-1 border-t border-outline-variant/10">
+                  <span className="text-on-surface-variant">Gap to borrower&apos;s full capacity</span>
+                  <span className="mono text-emerald-400">
+                    {formatTokenAmount(
+                      (maxBorrowableWei - BigInt(market.total_liquidity || "0")).toString(),
+                      market.borrow_asset.decimals
+                    )} {market.borrow_asset.symbol}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
           <Progress value={utilizationPct} className="h-2" indicatorClassName={utilizationPct > 80 ? "bg-orange-400" : "bg-primary-container"} />
         </Card>
       </div>
 
-      {/* Charts + Activity */}
+      {/* Activity summary — computed from real on-chain/backend data.
+          (Historical time-series liquidity/APR charts were removed here:
+          the backend doesn't track historical snapshots, so the previous
+          charts were rendering fabricated placeholder data.) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="p-5">
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Liquidity Depth</p>
-            <div className="flex gap-1">
-              {["1H", "1D", "1W"].map((t) => (
-                <button key={t} className={`px-2 py-0.5 text-xs rounded ${t === "1D" ? "bg-primary-container/20 text-primary" : "text-on-surface-variant"}`}>{t}</button>
-              ))}
+          <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant mb-4">Current Liquidity</p>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-on-surface-variant">Available to borrow</span>
+              <span className="text-sm font-bold mono text-primary">
+                {formatTokenAmount(market.total_liquidity, market.borrow_asset.decimals)} {market.borrow_asset.symbol}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-on-surface-variant">Currently borrowed</span>
+              <span className="text-sm font-bold mono text-on-surface">
+                {formatTokenAmount(market.total_principal, market.borrow_asset.decimals)} {market.borrow_asset.symbol}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-on-surface-variant">Utilization</span>
+              <span className="text-sm font-bold mono text-on-surface">{utilizationPct.toFixed(1)}%</span>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={160}>
-            <AreaChart data={MOCK_LIQUIDITY}>
-              <defs>
-                <linearGradient id="liqGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#ff5a1f" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#ff5a1f" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="time" tick={{ fill: "#e4beb3", fontSize: 10 }} axisLine={false} tickLine={false} />
-              <YAxis hide />
-              <Tooltip contentStyle={{ background: "#2c1c17", border: "1px solid rgba(255,255,255,0.08)", color: "#fadcd4", borderRadius: 8 }} />
-              <Area type="monotone" dataKey="value" stroke="#ff5a1f" strokeWidth={2} fill="url(#liqGrad)" />
-            </AreaChart>
-          </ResponsiveContainer>
+          <Progress value={utilizationPct} className="h-2 mt-3" indicatorClassName={utilizationPct > 80 ? "bg-orange-400" : "bg-primary-container"} />
         </Card>
 
         <Card className="p-5">
-          <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant mb-4">APR Yield History</p>
-          <div className="space-y-3">
-            {[
-              { label: "Min APR", value: "4.2%", color: "text-emerald-400" },
-              { label: "Avg APR", value: "6.8%", color: "text-amber-400" },
-              { label: "Max APR", value: "9.1%", color: "text-orange-400" },
-            ].map(({ label, value, color }) => (
-              <div key={label} className="flex items-center justify-between">
-                <span className="text-sm text-on-surface-variant">{label}</span>
-                <span className={`text-sm font-bold mono ${color}`}>{value}</span>
+          <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant mb-4">Active Offer APRs</p>
+          {(() => {
+            const activeAprs = (offers?.offers ?? [])
+              .filter((o) => o.status === "active" || o.status === "partially_filled")
+              .map((o) => o.apr);
+            if (activeAprs.length === 0) {
+              return <p className="text-sm text-on-surface-variant">No active offers yet.</p>;
+            }
+            const min = Math.min(...activeAprs);
+            const max = Math.max(...activeAprs);
+            const avg = activeAprs.reduce((s, v) => s + v, 0) / activeAprs.length;
+            return (
+              <div className="space-y-3">
+                {[
+                  { label: "Min APR", value: min, color: "text-emerald-400" },
+                  { label: "Avg APR", value: avg, color: "text-amber-400" },
+                  { label: "Max APR", value: max, color: "text-orange-400" },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className="flex items-center justify-between">
+                    <span className="text-sm text-on-surface-variant">{label}</span>
+                    <span className={`text-sm font-bold mono ${color}`}>{formatAPR(value)}</span>
+                  </div>
+                ))}
+                <p className="text-xs text-on-surface-variant pt-1">
+                  Across {activeAprs.length} active offer{activeAprs.length === 1 ? "" : "s"}
+                </p>
               </div>
-            ))}
-          </div>
-          <div className="mt-4 space-y-2">
-            <div className="flex justify-between text-xs text-on-surface-variant mb-1">
-              <span>Collateral Stability</span><span className="text-emerald-400">Optimal</span>
-            </div>
-            <Progress value={85} indicatorClassName="bg-emerald-400" />
-            <div className="flex justify-between text-xs text-on-surface-variant mt-2 mb-1">
-              <span>Oracle Latency</span><span className="text-on-surface">120ms</span>
-            </div>
-            <Progress value={92} indicatorClassName="bg-primary-container" />
-          </div>
+            );
+          })()}
         </Card>
       </div>
 
@@ -548,7 +576,9 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
                   offers.offers.map((o) => (
                     <TableRow key={o.offer_id}>
                       <TableCell><span className="mono text-xs">{formatAddress(o.lender)}</span></TableCell>
-                      <TableCell className="text-right mono">${(parseFloat(o.amount) / 1e6).toFixed(2)}M</TableCell>
+                      <TableCell className="text-right mono">
+                        {formatTokenAmount(o.amount, market.borrow_asset.decimals)} {market.borrow_asset.symbol}
+                      </TableCell>
                       <TableCell className="text-right"><span className="text-primary font-medium">{formatAPR(o.apr)}</span></TableCell>
                       <TableCell><span className="text-xs">{o.seniority === 0 ? "Senior" : "Junior"}</span></TableCell>
                       <TableCell><StatusBadge status={o.status} /></TableCell>
@@ -575,7 +605,7 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
           </TabsContent>
 
           <TabsContent value="participants" className="mt-0 p-5">
-            <MarketParticipants marketAddress={address} />
+            <MarketParticipants marketAddress={address} borrowDecimals={market?.borrow_asset.decimals} borrowSymbol={market?.borrow_asset.symbol} />
           </TabsContent>
 
           <TabsContent value="activity" className="mt-0">

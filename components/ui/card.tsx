@@ -85,19 +85,24 @@ export function MetricCard({
   className?: string;
 }) {
   return (
-    <Card className={cn("p-4", className)}>
+    <Card className={cn("p-4 min-w-0", className)}>
       <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">
         {label}
       </p>
-      <p className="text-xl font-semibold text-on-surface mono">{value}</p>
+      <p
+        className="text-xl font-semibold text-on-surface mono truncate"
+        title={typeof value === "string" || typeof value === "number" ? String(value) : undefined}
+      >
+        {value}
+      </p>
       {(sub || trend) && (
-        <div className="mt-1.5 flex items-center gap-2">
+        <div className="mt-1.5 flex items-center gap-2 min-w-0">
           {trend && (
-            <span className={cn("text-xs font-medium", trend.positive ? "text-emerald-400" : "text-red-400")}>
+            <span className={cn("text-xs font-medium shrink-0", trend.positive ? "text-emerald-400" : "text-red-400")}>
               {trend.positive ? "↑" : "↓"} {trend.value}
             </span>
           )}
-          {sub && <span className="text-xs text-on-surface-variant">{sub}</span>}
+          {sub && <span className="text-xs text-on-surface-variant truncate">{sub}</span>}
         </div>
       )}
     </Card>

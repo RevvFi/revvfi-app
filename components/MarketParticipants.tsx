@@ -5,7 +5,7 @@ import { usePositions } from "@/hooks/usePositions";
 import { Card } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatAddress, formatAPR } from "@/lib/utils";
+import { formatAddress, formatAPR, formatTokenAmount } from "@/lib/utils";
 import { Copy, Check, Users } from "lucide-react";
 import type { Position } from "@/types";
 
@@ -29,7 +29,7 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-function ParticipantCard({ position }: { position: Position }) {
+function ParticipantCard({ position, borrowDecimals, borrowSymbol }: { position: Position; borrowDecimals?: number; borrowSymbol?: string }) {
   return (
     <div className="flex items-start gap-4 p-4 rounded-lg border border-outline-variant/20 bg-surface-container-low hover:bg-surface-container transition-colors">
       <div className="min-w-0 flex-1">
@@ -43,7 +43,7 @@ function ParticipantCard({ position }: { position: Position }) {
           <div>
             <p className="text-on-surface-variant mb-0.5">Principal</p>
             <p className="font-semibold text-on-surface mono">
-              ${(parseFloat(position.principal) / 1e6).toFixed(2)}
+              {formatTokenAmount(position.principal, borrowDecimals)} {borrowSymbol}
             </p>
           </div>
           <div>
@@ -67,7 +67,7 @@ function ParticipantCard({ position }: { position: Position }) {
   );
 }
 
-export function MarketParticipants({ marketAddress }: { marketAddress: string }) {
+export function MarketParticipants({ marketAddress, borrowDecimals, borrowSymbol }: { marketAddress: string; borrowDecimals?: number; borrowSymbol?: string }) {
   const { data, isLoading, isError } = usePositions({ market_address: marketAddress });
 
   if (isLoading) {
@@ -115,7 +115,7 @@ export function MarketParticipants({ marketAddress }: { marketAddress: string })
       ) : (
         <div className="space-y-3">
           {positions.map((position) => (
-            <ParticipantCard key={position.token_id} position={position} />
+            <ParticipantCard key={position.token_id} position={position} borrowDecimals={borrowDecimals} borrowSymbol={borrowSymbol} />
           ))}
         </div>
       )}

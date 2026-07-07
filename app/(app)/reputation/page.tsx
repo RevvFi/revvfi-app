@@ -2,28 +2,20 @@
 
 import { useAccount } from "wagmi";
 import { useBorrower, useBorrowerRisk } from "@/hooks/useBorrower";
+import { useMyBorrowerPortfolio } from "@/hooks/usePortfolioData";
 import { Card } from "@/components/ui/card";
 import { RiskBadge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatAddress, formatTimestamp, reputationColor } from "@/lib/utils";
-import { Shield, TrendingUp, AlertTriangle } from "lucide-react";
-import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip } from "recharts";
-
-const HISTORY = [
-  { month: "Jan", score: 400 }, { month: "Feb", score: 420 }, { month: "Mar", score: 410 },
-  { month: "Apr", score: 440 }, { month: "May", score: 450 }, { month: "Jun", score: 450 },
-];
-
-const RADAR_DATA = [
-  { subject: "Repayment", A: 85 }, { subject: "Collateral", A: 70 }, { subject: "Activity", A: 60 },
-  { subject: "History", A: 45 }, { subject: "Diversity", A: 75 },
-];
+import { formatTimestamp, formatAssetAmounts, reputationColor } from "@/lib/utils";
+import { Shield } from "lucide-react";
+import { ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 export default function ReputationPage() {
   const { address } = useAccount();
   const { data: borrower, isLoading } = useBorrower(address ?? "");
   const { data: risk } = useBorrowerRisk(address ?? "");
+  const borrowerPortfolio = useMyBorrowerPortfolio(address);
 
   const score = borrower?.reputation_score ?? 0;
   const scorePct = (score / 1000) * 100;
@@ -68,7 +60,6 @@ export default function ReputationPage() {
               </div>
               <div className="text-center">
                 <RiskBadge label={borrower.risk_label} />
-                <p className="text-xs text-on-surface-variant mt-2">Top 5% of Institutional Borrowers</p>
               </div>
             </Card>
 
@@ -96,8 +87,7 @@ export default function ReputationPage() {
               <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant mb-4">Loan Performance</p>
               <div className="space-y-3">
                 {[
-                  { label: "Total Borrowed", value: `$${(parseFloat(borrower.total_borrowed) / 1e6).toFixed(2)}M` },
-                  { label: "Total Repaid", value: `$${(parseFloat(borrower.total_repaid) / 1e6).toFixed(2)}M` },
+                  { label: "Total Borrowed", value: formatAssetAmounts(borrowerPortfolio.totalPrincipal) },
                   { label: "Active Loans", value: borrower.active_loans },
                   { label: "Failed Loans", value: borrower.failed_loans, danger: true },
                   { label: "Member Since", value: formatTimestamp(borrower.registered_at) },
@@ -110,53 +100,6 @@ export default function ReputationPage() {
               </div>
             </Card>
           </div>
-
-          {/* Score history + Radar */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card className="p-5">
-              <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant mb-4">Score History</p>
-              <ResponsiveContainer width="100%" height={180}>
-                <AreaChart data={HISTORY}>
-                  <defs>
-                    <linearGradient id="repGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#ff5a1f" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="#ff5a1f" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" tick={{ fill: "#e4beb3", fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis domain={[300, 600]} tick={{ fill: "#e4beb3", fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ background: "#2c1c17", border: "1px solid rgba(255,255,255,0.08)", color: "#fadcd4", borderRadius: 8 }} />
-                  <Area type="monotone" dataKey="score" stroke="#ff5a1f" strokeWidth={2} fill="url(#repGrad)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </Card>
-
-            <Card className="p-5">
-              <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant mb-4">Risk Profile Radar</p>
-              <ResponsiveContainer width="100%" height={180}>
-                <RadarChart data={RADAR_DATA}>
-                  <PolarGrid stroke="#5b4038" />
-                  <PolarAngleAxis dataKey="subject" tick={{ fill: "#e4beb3", fontSize: 10 }} />
-                  <Radar name="Score" dataKey="A" stroke="#ff5a1f" fill="#ff5a1f" fillOpacity={0.2} />
-                </RadarChart>
-              </ResponsiveContainer>
-            </Card>
-          </div>
-
-          {/* Benchmark */}
-          <Card className="p-5">
-            <div className="flex items-start gap-3">
-              <TrendingUp className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-semibold text-on-surface mb-1">Benchmark Comparison</p>
-                <p className="text-xs text-on-surface-variant">
-                  Your score of <span className={`font-bold ${scoreColor}`}>{score}</span> ({borrower.risk_label}) places you in the{" "}
-                  <span className="text-primary font-medium">top 45%</span> of all institutional borrowers on RevvFi. To improve your score, maintain regular repayments and avoid defaults.
-                </p>
-              </div>
-            </div>
-          </Card>
         </>
       )}
     </div>

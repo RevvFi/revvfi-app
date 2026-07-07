@@ -27,6 +27,30 @@ export function formatTokenAmount(
   }
 }
 
+export function formatAssetAmounts(
+  assets: { symbol: string; amount: number }[],
+  displayDecimals = 2
+): string {
+  if (!assets.length) return "—";
+  return assets
+    .map((a) => `${a.amount.toLocaleString(undefined, { minimumFractionDigits: displayDecimals, maximumFractionDigits: displayDecimals })} ${a.symbol}`)
+    .join(", ");
+}
+
+export function mergeAssetAmounts(
+  a: { symbol: string; amount: number }[],
+  b: { symbol: string; amount: number }[]
+): { symbol: string; amount: number }[] {
+  const bySymbol: Record<string, number> = {};
+  [...a, ...b].forEach((x) => {
+    bySymbol[x.symbol] = (bySymbol[x.symbol] ?? 0) + x.amount;
+  });
+  return Object.entries(bySymbol)
+    .filter(([, amount]) => amount !== 0)
+    .sort(([s1], [s2]) => s1.localeCompare(s2))
+    .map(([symbol, amount]) => ({ symbol, amount }));
+}
+
 export function formatUSD(wei: string, decimals = 6): string {
   const amount = parseFloat(wei) / Math.pow(10, decimals);
   return new Intl.NumberFormat("en-US", {

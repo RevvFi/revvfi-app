@@ -6,14 +6,16 @@ import { WalletPrompt } from "@/components/wallet-gate";
 import { useAuthStore } from "@/store/auth.store";
 import { useSIWE } from "@/hooks/useAuth";
 import { useMyOffers, useCancelOffer } from "@/hooks/useOffers";
+import { useOfferBookMarketMap } from "@/hooks/useOfferBookMarketMap";
 import { useMyBids, useSettleAuction, useCanSettle } from "@/hooks/useAuctions";
 import { useTheme } from "@/components/theme-provider";
 import { Sun, Moon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatAddress, fmtUSD, formatAPR, formatTimestamp, formatCountdown } from "@/lib/utils";
+import { formatAddress, fmtUSD, formatAPR, formatTimestamp, formatCountdown, formatAssetAmounts } from "@/lib/utils";
 import { formatUnits } from "viem";
+import { CHAIN_NAMES } from "@/constants/chains";
 import {
   LogOut, Wallet,
   FileText, CheckCircle2, XCircle, Clock, Trash2,
@@ -22,7 +24,7 @@ import {
 import type { Auction } from "@/types";
 
 export default function SettingsPage() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chain } = useAccount();
   const { disconnect } = useDisconnect();
   const { user, isAuthenticated } = useAuthStore();
   const { logout } = useSIWE();
@@ -31,24 +33,37 @@ export default function SettingsPage() {
   // My Offers data
   const { data: myOffersData, isLoading: offersLoading } = useMyOffers(address);
   const cancelOfferMutation = useCancelOffer();
+  const { map: offerBookMarketMap } = useOfferBookMarketMap();
 
   const myOffers = myOffersData?.offers ?? [];
   const activeOffers = myOffers.filter((o) => o.status === "active" || o.status === "partially_filled");
   const filledOffers = myOffers.filter((o) => o.status === "filled");
-  const totalLiquidityRaw = activeOffers.reduce(
-    (sum, o) => sum + parseFloat(o.remaining_amount || o.amount),
-    0,
-  );
+  // Offers can span markets with different borrow assets/decimals, so sum
+  // per-asset (via the OfferBook->Market reverse lookup) rather than a single
+  // raw total assuming a fixed decimals count.
+  const activeLiquidityByAsset = (() => {
+    const bySymbol: Record<string, { amount: number; decimals: number }> = {};
+    activeOffers.forEach((o) => {
+      const market = offerBookMarketMap[(o.market_address || "").toLowerCase()];
+      const decimals = market?.borrow_asset.decimals ?? 6;
+      const symbol = market?.borrow_asset.symbol ?? "?";
+      const amount = Number(formatUnits(BigInt(o.remaining_amount || o.amount || "0"), decimals));
+      bySymbol[symbol] = { decimals, amount: (bySymbol[symbol]?.amount ?? 0) + amount };
+    });
+    return Object.entries(bySymbol)
+      .filter(([, v]) => v.amount !== 0)
+      .map(([symbol, v]) => ({ symbol, amount: v.amount }));
+  })();
 
   async function handleLogout() {
     await logout();
     disconnect();
   }
 
-  async function handleCancelOffer(offerId: number, marketAddress: string) {
+  async function handleCancelOffer(offerId: number, offerBookAddress: string) {
     if (!confirm("Are you sure you want to cancel this offer?")) return;
     try {
-      await cancelOfferMutation.mutateAsync({ offerId, marketAddress });
+      await cancelOfferMutation.mutateAsync({ offerId, offerBookAddress });
     } catch (error) {
       console.error("Cancel offer failed:", error);
     }
@@ -138,7 +153,7 @@ export default function SettingsPage() {
               <div className="text-right">
                 <p className="text-xs text-on-surface-variant">Active Liquidity</p>
                 <p className="text-sm font-bold text-primary mono">
-                  ${(totalLiquidityRaw / 1e6).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  {formatAssetAmounts(activeLiquidityByAsset, 0)}
                 </p>
               </div>
               <div className="text-right">
@@ -326,9 +341,7 @@ export default function SettingsPage() {
               <p className="text-sm font-medium text-on-surface">{label}</p>
               <p className="text-xs text-on-surface-variant">{desc}</p>
             </div>
-            <button className="h-6 w-11 rounded-full bg-primary-container transition-colors relative">
-              <span className="absolute right-1 top-1 h-4 w-4 rounded-full bg-white shadow transition-transform" />
-            </button>
+            <span className="text-xs text-on-surface-variant/60 rounded-full border border-outline-variant/20 px-2 py-1">Coming soon</span>
           </div>
         ))}
       </Card>
@@ -337,17 +350,16 @@ export default function SettingsPage() {
       <Card className="p-5 space-y-4">
         <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Network</p>
         <div className="space-y-2">
-          {[
-            { id: 1, name: "Ethereum Mainnet", active: true },
-            { id: 11155111, name: "Sepolia Testnet", active: false },
-            { id: 31337, name: "Local Development", active: false },
-          ].map(({ id, name, active }) => (
-            <div key={id} className={`flex items-center gap-3 rounded-lg p-3 border ${active ? "border-primary-container/40 bg-primary-container/10" : "border-outline-variant/20"}`}>
-              <span className={`h-2 w-2 rounded-full ${active ? "bg-emerald-400" : "bg-outline-variant"}`} />
-              <span className="text-sm text-on-surface">{name}</span>
-              {active && <span className="ml-auto text-xs text-primary">Active</span>}
-            </div>
-          ))}
+          {[1, 11155111, 31337].map((id) => {
+            const active = chain?.id === id;
+            return (
+              <div key={id} className={`flex items-center gap-3 rounded-lg p-3 border ${active ? "border-primary-container/40 bg-primary-container/10" : "border-outline-variant/20"}`}>
+                <span className={`h-2 w-2 rounded-full ${active ? "bg-emerald-400" : "bg-outline-variant"}`} />
+                <span className="text-sm text-on-surface">{CHAIN_NAMES[id] ?? `Chain ${id}`}</span>
+                {active && <span className="ml-auto text-xs text-primary">Active</span>}
+              </div>
+            );
+          })}
         </div>
       </Card>
 
@@ -367,6 +379,23 @@ export default function SettingsPage() {
           </div>
         </div>
       </Card>
+
+      {/* Legal */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-1">
+        {[
+          { href: "/about", label: "About" },
+          { href: "/team", label: "Team" },
+          { href: "/support", label: "Support" },
+          { href: "/contribute", label: "Contribute" },
+          { href: "/contact", label: "Contact" },
+          { href: "/terms", label: "Terms" },
+          { href: "/privacy", label: "Privacy" },
+        ].map((l) => (
+          <Link key={l.href} href={l.href} className="text-xs text-on-surface-variant hover:text-on-surface transition-colors">
+            {l.label}
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }

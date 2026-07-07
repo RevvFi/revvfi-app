@@ -3,17 +3,22 @@
 import { useState } from "react";
 import { useAccount } from "wagmi";
 import { WalletGate } from "@/components/wallet-gate";
-import { useOffers, useCreateOffer, useCancelOffer } from "@/hooks/useOffers";
+import { useOffers, useCreateOffer, useCancelOffer, useCleanupExpiredOffers } from "@/hooks/useOffers";
 import { usePortfolio } from "@/hooks/usePositions";
+import { useMyLenderPortfolio } from "@/hooks/usePortfolioData";
 import { useMarkets } from "@/hooks/useMarkets";
+import { useMaxBorrowable } from "@/hooks/useMarketMetrics";
+import { useOfferBookMarketMap } from "@/hooks/useOfferBookMarketMap";
+import { formatUnits } from "viem";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, EmptyState } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatAddress, formatAPR } from "@/lib/utils";
+import { formatAddress, formatAPR, formatTokenAmount, formatAssetAmounts } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth.store";
+import { useSIWE } from "@/hooks/useAuth";
 import { Info, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { MarketSelector } from "@/components/MarketSelector";
@@ -21,11 +26,14 @@ import { MarketSelector } from "@/components/MarketSelector";
 export default function LendPage() {
   const { address } = useAccount();
   const { isAuthenticated } = useAuthStore();
+  const { login, isSigningIn } = useSIWE();
   const { data: portfolio } = usePortfolio();
+  const lenderPortfolio = useMyLenderPortfolio(address);
   const { data: myOffers, isLoading: offersLoading } = useOffers({ lender: address });
   const { data: markets } = useMarkets({ is_active: true });
   const createOffer = useCreateOffer();
   const cancelOffer = useCancelOffer();
+  const cleanupExpiredOffers = useCleanupExpiredOffers();
 
   const [form, setForm] = useState({
     market_address: "",
@@ -40,6 +48,14 @@ export default function LendPage() {
   }
 
   const selectedMarket = markets?.markets.find((m) => m.address === form.market_address);
+  const { map: offerBookMarketMap } = useOfferBookMarketMap();
+
+  const { data: maxBorrowableWei } = useMaxBorrowable(selectedMarket?.address as `0x${string}` | undefined);
+  const remainingDemandWei = selectedMarket && maxBorrowableWei !== undefined
+    ? (maxBorrowableWei > BigInt(selectedMarket.total_liquidity)
+        ? maxBorrowableWei - BigInt(selectedMarket.total_liquidity)
+        : BigInt(0))
+    : BigInt(0);
 
   async function handleCreate() {
     if (!form.market_address || !form.amount) {
@@ -50,20 +66,26 @@ export default function LendPage() {
       toast.error("Selected market not found");
       return;
     }
+    if (!(parseFloat(form.amount) > 0)) {
+      toast.error("Amount must be greater than 0");
+      return;
+    }
+    if (!(parseInt(form.apr) > 0)) {
+      toast.error("APR must be greater than 0");
+      return;
+    }
     await createOffer.mutateAsync({
       market_address: form.market_address,
       amount: form.amount,
       apr: parseInt(form.apr),
       seniority: parseInt(form.seniority) as 0 | 1,
       expiry_days: parseInt(form.expiry_days),
-      // required for on-chain approve step
       borrow_asset_address: selectedMarket.borrow_asset.address,
       borrow_asset_decimals: selectedMarket.borrow_asset.decimals,
     });
     setForm({ market_address: "", amount: "", apr: "1250", seniority: "0", expiry_days: "90" });
   }
 
-  const totalDeposited = portfolio?.total_supplied ?? "0";
   const avgAPR = portfolio?.avg_apr ?? 0;
 
   return (
@@ -81,25 +103,29 @@ export default function LendPage() {
 
       {/* Top metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-4">
+        <Card className="p-4 min-w-0">
           <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Total Deposited</p>
-          <p className="text-2xl font-bold text-on-surface mt-1 mono">${(parseFloat(totalDeposited) / 1e6).toFixed(2)}M</p>
+          <p className="text-xl font-bold text-on-surface mt-1 mono truncate">{formatAssetAmounts(lenderPortfolio.totalPositionsValue)}</p>
         </Card>
-        <Card className="p-4">
+        <Card className="p-4 min-w-0">
           <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Average APR</p>
-          <p className="text-2xl font-bold text-primary mt-1 mono">{(avgAPR / 100).toFixed(2)}%</p>
+          <p className="text-2xl font-bold text-primary mt-1 mono truncate">{(avgAPR / 100).toFixed(2)}%</p>
         </Card>
-        <Card className="p-4">
+        <Card className="p-4 min-w-0">
           <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Open Offers</p>
           <p className="text-2xl font-bold text-on-surface mt-1">{myOffers?.count ?? 0}</p>
         </Card>
-        <Card className="p-4 border-primary-container/20">
+        <Card className="p-4 border-primary-container/20 min-w-0">
           <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Earned Interest</p>
-          <p className="text-2xl font-bold text-primary mt-1 mono">
-            ${(parseFloat(portfolio?.earned_interest ?? "0") / 1e6).toFixed(4)}M
+          <p className="text-xl font-bold text-primary mt-1 mono truncate">
+            {formatAssetAmounts(lenderPortfolio.totalEarned, 4)}
           </p>
         </Card>
       </div>
+      <p className="text-xs text-on-surface-variant -mt-2">
+        Note: these totals blend offers across markets that may borrow different tokens (e.g. USDC vs
+        WETH) without a shared price feed - treat them as directional only, not a precise dollar figure.
+      </p>
 
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -121,9 +147,47 @@ export default function LendPage() {
                 filterByLender={false}
               />
               {selectedMarket && (
-                <div className="mt-2 p-2 bg-surface-container-low rounded text-xs">
-                  <span className="text-on-surface-variant">Borrower:</span>{" "}
-                  <span className="font-mono text-on-surface">{formatAddress(selectedMarket.borrower)}</span>
+                <div className="mt-2 p-2 bg-surface-container-low rounded text-xs space-y-1">
+                  <div>
+                    <span className="text-on-surface-variant">Borrower:</span>{" "}
+                    <span className="font-mono text-on-surface">{formatAddress(selectedMarket.borrower)}</span>
+                  </div>
+                  <div>
+                    <span className="text-on-surface-variant">Can still borrow up to:</span>{" "}
+                    <span className="font-mono text-primary">
+                      {maxBorrowableWei !== undefined
+                        ? `${formatTokenAmount(maxBorrowableWei.toString(), selectedMarket.borrow_asset.decimals)} ${selectedMarket.borrow_asset.symbol}`
+                        : "…"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-on-surface-variant">Already offered (unfilled):</span>{" "}
+                    <span className="font-mono text-on-surface">
+                      {formatTokenAmount(selectedMarket.total_liquidity, selectedMarket.borrow_asset.decimals)} {selectedMarket.borrow_asset.symbol}
+                    </span>
+                  </div>
+                  {remainingDemandWei > BigInt(0) && (
+                    <div className="flex items-center justify-between gap-2 pt-0.5">
+                      <span className="text-on-surface-variant">
+                        Gap to fully cover borrower&apos;s capacity:{" "}
+                        <span className="font-mono text-emerald-400">
+                          {formatTokenAmount(remainingDemandWei.toString(), selectedMarket.borrow_asset.decimals)} {selectedMarket.borrow_asset.symbol}
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        className="text-primary underline shrink-0"
+                        onClick={() => setField("amount", formatUnits(remainingDemandWei, selectedMarket.borrow_asset.decimals))}
+                      >
+                        Fill this
+                      </button>
+                    </div>
+                  )}
+                  <p className="text-on-surface-variant pt-0.5">
+                    This is an open order book, not a direct loan request - your offer joins the
+                    queue and gets matched lowest-APR-first whenever the borrower draws down. The
+                    numbers above are a guide to current demand, not a hard cap on what you can offer.
+                  </p>
                 </div>
               )}
             </div>
@@ -131,9 +195,14 @@ export default function LendPage() {
             <Input
               label={`Amount (${selectedMarket?.borrow_asset.symbol ?? "USDC"})`}
               type="number"
+              min="0"
+              step="any"
               placeholder="0.00"
               value={form.amount}
-              onChange={(e) => setField("amount", e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "" || parseFloat(v) >= 0) setField("amount", v);
+              }}
               suffix={selectedMarket?.borrow_asset.symbol ?? "USDC"}
               hint="Token approval + on-chain submit required"
             />
@@ -142,9 +211,14 @@ export default function LendPage() {
               <Input
                 label="APR (BPS)"
                 type="number"
+                min="1"
+                step="1"
                 placeholder="1250"
                 value={form.apr}
-                onChange={(e) => setField("apr", e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === "" || parseInt(v) >= 0) setField("apr", v);
+                }}
                 hint={`= ${(parseInt(form.apr || "0") / 100).toFixed(2)}%`}
               />
               <div>
@@ -207,6 +281,23 @@ export default function LendPage() {
               </p>
             </div>
 
+            {/* Wallet connected (WalletGate lets you through) but not signed in
+                (SIWE) yet - address ?, !isAuthenticated. Without this, the
+                Submit button below is just silently disabled with nothing on
+                the page explaining why - the wallet auto-reconnecting from a
+                previous session bypasses the connect button entirely, so
+                there's no other place this gets surfaced. */}
+            {address && !isAuthenticated && (
+              <div className="flex items-center justify-between gap-3 rounded-lg bg-amber-400/10 border border-amber-400/30 p-3">
+                <p className="text-xs text-amber-400">
+                  Sign in with your wallet to submit offers.
+                </p>
+                <Button size="sm" variant="secondary" onClick={() => login()} loading={isSigningIn}>
+                  Sign In
+                </Button>
+              </div>
+            )}
+
             <Button
               className="w-full"
               size="lg"
@@ -225,6 +316,12 @@ export default function LendPage() {
             <div className="p-5 pb-3">
               <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
                 Active Market Placements
+              </p>
+              <p className="text-xs text-on-surface-variant mt-1">
+                Nothing on-chain runs automatically without a transaction - an offer past its expiry
+                doesn&apos;t auto-refund itself. You can always reclaim your own funds immediately by
+                clicking Cancel, expired or not; it just won&apos;t show as &quot;Expired&quot; until
+                someone (you, or anyone) submits a cleanup transaction.
               </p>
             </div>
             <Table>
@@ -248,10 +345,22 @@ export default function LendPage() {
                     </TableRow>
                   ))
                 ) : myOffers?.offers.length ? (
-                  myOffers.offers.map((o) => (
+                  myOffers.offers.map((o) => {
+                    // o.market_address is the OfferBook clone's address, not the market's.
+                    const market = offerBookMarketMap[o.market_address.toLowerCase()];
+                    // status only flips to "expired" once someone runs cleanupExpiredOffers() -
+                    // until then it's still cancellable even past its expiry timestamp.
+                    const isUncleanedExpired =
+                      (o.status === "active" || o.status === "partially_filled") &&
+                      o.expiry * 1000 < Date.now();
+                    return (
                     <TableRow key={o.offer_id}>
-                      <TableCell className="mono text-xs">{formatAddress(o.market_address, 4)}</TableCell>
-                      <TableCell className="text-right mono">{(parseFloat(o.amount) / 1e6).toFixed(2)}M</TableCell>
+                      <TableCell className="mono text-xs">
+                        {market ? `${market.borrow_asset.symbol}/${market.collateral_asset.symbol}` : formatAddress(o.market_address, 4)}
+                      </TableCell>
+                      <TableCell className="text-right mono">
+                        {market ? `${formatTokenAmount(o.amount, market.borrow_asset.decimals)} ${market.borrow_asset.symbol}` : "…"}
+                      </TableCell>
                       <TableCell className="text-right">
                         <span className="text-primary font-bold">{formatAPR(o.apr)}</span>
                       </TableCell>
@@ -260,22 +369,31 @@ export default function LendPage() {
                           {o.seniority === 0 ? "Senior" : "Junior"}
                         </span>
                       </TableCell>
-                      <TableCell><StatusBadge status={o.status} /></TableCell>
+                      <TableCell>
+                        {isUncleanedExpired ? (
+                          <span className="text-xs font-medium text-amber-400" title="Expired on-chain but nobody has submitted a cleanup transaction yet - your funds are safe and reclaimable right now via Cancel.">
+                            Expired (reclaim below)
+                          </span>
+                        ) : (
+                          <StatusBadge status={o.status} />
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-xs text-red-400"
+                          className={isUncleanedExpired ? "text-xs text-amber-400 font-semibold" : "text-xs text-red-400"}
                           onClick={() =>
-                            cancelOffer.mutate({ offerId: o.offer_id, marketAddress: o.market_address })
+                            cancelOffer.mutate({ offerId: o.offer_id, offerBookAddress: o.market_address })
                           }
                           loading={cancelOffer.isPending}
                         >
-                          Cancel
+                          {isUncleanedExpired ? "Reclaim Funds" : "Cancel"}
                         </Button>
                       </TableCell>
                     </TableRow>
-                  ))
+                    );
+                  })
                 ) : (
                   <TableRow>
                     <TableCell colSpan={6}>

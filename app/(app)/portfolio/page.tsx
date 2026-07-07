@@ -14,7 +14,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, EmptyState as TableEmptyState } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatAddress, formatAPR, formatRelativeTime } from "@/lib/utils";
+import { formatAddress, formatAPR, formatRelativeTime, formatAssetAmounts, mergeAssetAmounts, formatTokenAmount } from "@/lib/utils";
 import { Download, Settings, CheckCircle2, TrendingUp, TrendingDown, DollarSign, Users, BarChart3, Activity, Copy, Check, Wallet } from "lucide-react";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
 
@@ -80,19 +80,21 @@ export default function PortfolioPage() {
   const router = useRouter();
   const { address } = useAccount();
   const { data: positions, isLoading: positionsLoading } = usePositions();
-  const { data: offers, isLoading: offersLoading } = useOffers();
+  const { data: offers, isLoading: offersLoading } = useOffers({ lender: address });
   const { data: withdrawals, isLoading: withdrawalsLoading } = useWithdrawals();
   const claimPosition = useClaimPosition();
   const cancelOffer = useCancelOffer();
   const cancelWithdrawal = useCancelWithdrawal();
   const claimWithdrawal = useClaimWithdrawal();
 
-  // NEW: Complete portfolio data
   const completePortfolio = useCompletePortfolio(address);
   const borrowerData = completePortfolio.borrower;
   const lenderData = completePortfolio.lender;
+  const totalValueByAsset = useMemo(
+    () => mergeAssetAmounts(lenderData.totalPositionsValue, lenderData.totalOfferAmount),
+    [lenderData.totalPositionsValue, lenderData.totalOfferAmount]
+  );
 
-  // Build allocation from positions — group by market/asset
   const allocationData = useMemo(() => {
     if (!positions?.positions || positions.positions.length === 0) return [];
     const total = positions.positions.reduce((sum, p) => sum + parseFloat(p.principal || "0"), 0);
@@ -160,8 +162,8 @@ export default function PortfolioPage() {
                 <DollarSign className="h-4 w-4 text-primary" />
                 <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Total Value</p>
               </div>
-              <p className="text-2xl font-bold text-on-surface mono">
-                ${(lenderData.totalPositionsValue / 1e6).toFixed(2)}M
+              <p className="text-xl font-bold text-on-surface mono">
+                {formatAssetAmounts(totalValueByAsset)}
               </p>
               <p className="text-xs text-emerald-400 mt-1">Lending + Offers</p>
             </Card>
@@ -172,8 +174,8 @@ export default function PortfolioPage() {
                 <Activity className="h-4 w-4 text-primary" />
                 <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Claimable</p>
               </div>
-              <p className="text-2xl font-bold text-primary mono">
-                ${(lenderData.totalClaimable / 1e6).toFixed(4)}
+              <p className="text-xl font-bold text-primary mono">
+                {formatAssetAmounts(lenderData.totalClaimable, 4)}
               </p>
               <p className="text-xs text-on-surface-variant mt-1">Ready to claim</p>
             </Card>
@@ -184,8 +186,8 @@ export default function PortfolioPage() {
                 <BarChart3 className="h-4 w-4 text-emerald-400" />
                 <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Earned</p>
               </div>
-              <p className="text-2xl font-bold text-emerald-400 mono">
-                ${(lenderData.totalEarned / 1e6).toFixed(4)}
+              <p className="text-xl font-bold text-emerald-400 mono">
+                {formatAssetAmounts(lenderData.totalEarned, 4)}
               </p>
               <p className="text-xs text-on-surface-variant mt-1">Total interest</p>
             </Card>
@@ -293,9 +295,9 @@ export default function PortfolioPage() {
                       <p className="font-semibold text-on-surface">Lender in {lenderData.marketsCount} {lenderData.marketsCount === 1 ? 'market' : 'markets'}</p>
                     </div>
                     <div className="space-y-1 text-sm text-on-surface-variant">
-                      <p>• Total Lent: ${(lenderData.totalPositionsValue / 1e6).toFixed(2)}M</p>
-                      <p>• Total Earned: ${(lenderData.totalEarned / 1e6).toFixed(4)}</p>
-                      <p>• Claimable Now: ${(lenderData.totalClaimable / 1e6).toFixed(4)}</p>
+                      <p>• Total Lent: {formatAssetAmounts(lenderData.totalPositionsValue)}</p>
+                      <p>• Total Earned: {formatAssetAmounts(lenderData.totalEarned, 4)}</p>
+                      <p>• Claimable Now: {formatAssetAmounts(lenderData.totalClaimable, 4)}</p>
                     </div>
                   </div>
                 )}
@@ -324,13 +326,13 @@ export default function PortfolioPage() {
                           <div>
                             <p className="text-on-surface-variant">Positions</p>
                             <p className="font-semibold text-on-surface">
-                              {data.positions.length} (${(data.totalLent / 1e6).toFixed(2)}M)
+                              {data.positions.length} ({data.totalLent.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {data.symbol})
                             </p>
                           </div>
                           <div>
                             <p className="text-on-surface-variant">Earned</p>
                             <p className="font-semibold text-emerald-400">
-                              ${(data.totalEarned / 1e6).toFixed(4)}
+                              {data.totalEarned.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })} {data.symbol}
                             </p>
                           </div>
                         </div>
@@ -482,13 +484,17 @@ export default function PortfolioPage() {
                     <TableRow key={i}>{Array.from({ length: 9 }).map((_, j) => <TableCell key={j}><Skeleton className="h-4" /></TableCell>)}</TableRow>
                   ))
                 ) : positions?.positions.length ? (
-                  positions.positions.map((pos) => (
+                  positions.positions.map((pos) => {
+                    const posMarket = lenderData.marketByAddress[(pos.market_address || "").toLowerCase()];
+                    const posDecimals = posMarket?.borrow_asset.decimals ?? 6;
+                    const posSymbol = posMarket?.borrow_asset.symbol ?? "";
+                    return (
                     <TableRow key={pos.token_id}>
                       <TableCell className="font-medium">#{pos.token_id}</TableCell>
                       <TableCell><span className="mono text-xs">{formatAddress(pos.market_address)}</span></TableCell>
-                      <TableCell className="text-right mono">${(parseFloat(pos.principal) / 1e6).toFixed(2)}M</TableCell>
-                      <TableCell className="text-right mono text-emerald-400">${(parseFloat(pos.accrued_interest) / 1e6).toFixed(4)}</TableCell>
-                      <TableCell className="text-right mono">${(parseFloat(pos.claimable_amount) / 1e6).toFixed(4)}</TableCell>
+                      <TableCell className="text-right mono">{formatTokenAmount(pos.principal, posDecimals)} {posSymbol}</TableCell>
+                      <TableCell className="text-right mono text-emerald-400">{formatTokenAmount(pos.accrued_interest, posDecimals, 4)} {posSymbol}</TableCell>
+                      <TableCell className="text-right mono">{formatTokenAmount(pos.claimable_amount, posDecimals, 4)} {posSymbol}</TableCell>
                       <TableCell className="text-right"><span className="text-primary font-medium">{formatAPR(pos.apr)}</span></TableCell>
                       <TableCell><span className="text-xs">{pos.seniority === 0 ? "Senior" : "Junior"}</span></TableCell>
                       <TableCell><StatusBadge status={pos.status} /></TableCell>
@@ -502,7 +508,8 @@ export default function PortfolioPage() {
                         )}
                       </TableCell>
                     </TableRow>
-                  ))
+                    );
+                  })
                 ) : (
                   <TableRow>
                     <TableCell colSpan={9}>
@@ -542,11 +549,15 @@ export default function PortfolioPage() {
                     <TableRow key={i}>{Array.from({ length: 9 }).map((_, j) => <TableCell key={j}><Skeleton className="h-4" /></TableCell>)}</TableRow>
                   ))
                 ) : offers?.offers.length ? (
-                  offers.offers.map((o) => (
+                  offers.offers.map((o) => {
+                    const offerMarket = lenderData.offerBookMarketMap[(o.market_address || "").toLowerCase()];
+                    const offerDecimals = offerMarket?.borrow_asset.decimals ?? 6;
+                    const offerSymbol = offerMarket?.borrow_asset.symbol ?? "";
+                    return (
                     <TableRow key={o.offer_id}>
                       <TableCell>#{o.offer_id}</TableCell>
                       <TableCell><span className="mono text-xs">{formatAddress(o.market_address)}</span></TableCell>
-                      <TableCell className="text-right mono">${(parseFloat(o.amount) / 1e6).toFixed(2)}M</TableCell>
+                      <TableCell className="text-right mono">{formatTokenAmount(o.amount, offerDecimals)} {offerSymbol}</TableCell>
                       <TableCell className="text-right">
                         <span className="text-xs">{o.fill_percentage.toFixed(0)}%</span>
                       </TableCell>
@@ -561,13 +572,14 @@ export default function PortfolioPage() {
                       <TableCell>
                         {o.status === "active" && (
                           <Button size="sm" variant="ghost" className="text-xs text-red-400"
-                            onClick={() => cancelOffer.mutate({ offerId: o.offer_id, marketAddress: o.market_address })} loading={cancelOffer.isPending}>
+                            onClick={() => cancelOffer.mutate({ offerId: o.offer_id, offerBookAddress: o.market_address })} loading={cancelOffer.isPending}>
                             Cancel
                           </Button>
                         )}
                       </TableCell>
                     </TableRow>
-                  ))
+                    );
+                  })
                 ) : (
                   <TableRow><TableCell colSpan={9}><TableEmptyState title="No offers" description="Create offers through the Lend portal" /></TableCell></TableRow>
                 )}
@@ -596,14 +608,19 @@ export default function PortfolioPage() {
                     <TableRow key={i}>{Array.from({ length: 8 }).map((_, j) => <TableCell key={j}><Skeleton className="h-4" /></TableCell>)}</TableRow>
                   ))
                 ) : withdrawals?.withdrawals.length ? (
-                  withdrawals.withdrawals.map((w) => (
+                  withdrawals.withdrawals.map((w) => {
+                    const wPosition = positions?.positions.find((p) => p.token_id === w.position_id);
+                    const wMarket = wPosition ? lenderData.marketByAddress[(wPosition.market_address || "").toLowerCase()] : undefined;
+                    const wDecimals = wMarket?.borrow_asset.decimals ?? 6;
+                    const wSymbol = wMarket?.borrow_asset.symbol ?? "";
+                    return (
                     <TableRow key={w.request_id}>
                       <TableCell>#{w.request_id}</TableCell>
                       <TableCell>Position #{w.position_id}</TableCell>
-                      <TableCell className="text-right mono">${(parseFloat(w.amount) / 1e6).toFixed(4)}M</TableCell>
+                      <TableCell className="text-right mono">{formatTokenAmount(w.amount, wDecimals, 4)} {wSymbol}</TableCell>
                       <TableCell className="text-right mono">
                         {w.fulfilled_amount ? (
-                          <span className="text-emerald-400">${(parseFloat(w.fulfilled_amount) / 1e6).toFixed(4)}M</span>
+                          <span className="text-emerald-400">{formatTokenAmount(w.fulfilled_amount, wDecimals, 4)} {wSymbol}</span>
                         ) : (
                           <span className="text-on-surface-variant">—</span>
                         )}
@@ -640,7 +657,8 @@ export default function PortfolioPage() {
                         )}
                       </TableCell>
                     </TableRow>
-                  ))
+                    );
+                  })
                 ) : (
                   <TableRow><TableCell colSpan={8}><TableEmptyState title="No withdrawal requests" description="Request withdrawals from your positions" /></TableCell></TableRow>
                 )}

@@ -9,7 +9,9 @@ import { queryKeys } from "@/constants/query-keys";
 import { MARKET_ABI, OFFER_BOOK_ABI } from "@/lib/contracts/abis";
 import { readContract } from "@wagmi/core";
 import { wagmiConfig } from "@/providers/wagmi-config";
+import { localChain } from "@/constants/chains";
 import type { CreateOfferRequest, QuoteRequest } from "@/types";
+import { useEnsureLocalChain } from "@/hooks/useEnsureLocalChain";
 
 export interface CreateOfferOnChainParams extends CreateOfferRequest {
   borrow_asset_address: string;
@@ -20,6 +22,52 @@ export function useOffers(params?: OffersParams) {
   return useQuery({
     queryKey: queryKeys.offers.all(params),
     queryFn: () => offerService.getOffers(params),
+    // /offers requires either market_address or lender server-side (it 400s
+    // otherwise, rather than dumping the whole table) - don't fire before
+    // one of them is actually available (e.g. wallet not connected yet).
+    enabled: !!params?.market_address || !!params?.lender,
+    // An offer's fill state changes from someone ELSE's action (a borrower
+    // matching it) - refetchOnWindowFocus is globally off, so without
+    // polling this would never update until a full page reload.
+    refetchInterval: 15_000,
+  });
+}
+
+/**
+ * Resolve a Market's OfferBook clone address on-chain.
+ *
+ * The backend's `offers` table is keyed by the address that actually emits
+ * offer events — the per-market OfferBook clone — not the Market contract
+ * itself. Every offers/quote query must use this address, or the API will
+ * (silently, since it's a valid-but-empty query) return zero results.
+ * The mapping is immutable per market, so it's safe to cache indefinitely.
+ */
+export function useOfferBookAddress(marketAddress: string | undefined) {
+  return useQuery({
+    queryKey: ["offerBookAddress", marketAddress],
+    queryFn: async () =>
+      (await readContract(wagmiConfig, {
+        address: marketAddress as `0x${string}`,
+        abi: MARKET_ABI,
+        functionName: "offerBook",
+        chainId: localChain.id,
+      })) as `0x${string}`,
+    enabled: !!marketAddress,
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * Get all offers (any status) for a specific market, keyed by the market's
+ * own address — resolves the underlying OfferBook address internally so
+ * callers never need to know about the Market/OfferBook address split.
+ */
+export function useOffersForMarket(marketAddress: string | undefined) {
+  const { data: offerBookAddr } = useOfferBookAddress(marketAddress);
+  return useQuery({
+    queryKey: ["offers", "allByMarket", marketAddress],
+    queryFn: () => offerService.getOffers({ market_address: offerBookAddr }),
+    enabled: !!marketAddress && !!offerBookAddr,
   });
 }
 
@@ -41,13 +89,14 @@ export function useMyOffers(lenderAddress: string | undefined) {
  * Used by borrowers to see available liquidity
  */
 export function useMarketOffers(marketAddress: string | undefined) {
+  const { data: offerBookAddr } = useOfferBookAddress(marketAddress);
   return useQuery({
     queryKey: ['offers', 'byMarket', marketAddress],
     queryFn: () => offerService.getOffers({
-      market_address: marketAddress,
+      market_address: offerBookAddr,
       status: 'active'
     }),
-    enabled: !!marketAddress,
+    enabled: !!marketAddress && !!offerBookAddr,
     refetchInterval: 30_000, // Refresh every 30 seconds
   });
 }
@@ -63,10 +112,12 @@ export function useOffer(id: number) {
 export function useCreateOffer() {
   const qc = useQueryClient();
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient();
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ chainId: localChain.id });
 
   return useMutation({
     mutationFn: async (payload: CreateOfferOnChainParams) => {
+      await ensureLocalChain();
       const {
         borrow_asset_address,
         borrow_asset_decimals,
@@ -88,6 +139,7 @@ export function useCreateOffer() {
         address: marketAddr,
         abi: MARKET_ABI,
         functionName: "offerBook",
+        chainId: localChain.id,
       })) as `0x${string}`;
 
       // Step 1 — approve the OfferBook to pull borrow asset from lender
@@ -97,8 +149,10 @@ export function useCreateOffer() {
         abi: erc20Abi,
         functionName: "approve",
         args: [offerBookAddr, amountWei],
+        chainId: localChain.id,
       });
-      await publicClient!.waitForTransactionReceipt({ hash: approveTx });
+      const approveReceipt = await publicClient!.waitForTransactionReceipt({ hash: approveTx });
+      if (approveReceipt.status !== "success") throw new Error("Approval transaction failed");
 
       // Step 2 — submit offer on-chain via OfferBook
       toast.info("Step 2/2: Submitting offer to OfferBook…");
@@ -107,8 +161,10 @@ export function useCreateOffer() {
         abi: OFFER_BOOK_ABI,
         functionName: "submitOffer",
         args: [amountWei, BigInt(apr), seniority, durationSecs],
+        chainId: localChain.id,
       });
-      await publicClient!.waitForTransactionReceipt({ hash: offerTx });
+      const offerReceipt = await publicClient!.waitForTransactionReceipt({ hash: offerTx });
+      if (offerReceipt.status !== "success") throw new Error("Offer submission transaction failed");
 
       // Step 3 — sync backend (best-effort; backend may also index from events)
       try {
@@ -135,27 +191,30 @@ export function useCreateOffer() {
 export function useCancelOffer() {
   const qc = useQueryClient();
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient();
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ chainId: localChain.id });
 
   return useMutation({
-    mutationFn: async ({ offerId, marketAddress }: { offerId: number; marketAddress: string }) => {
-      // Step 1: Read OfferBook address from Market contract
-      toast.info("Getting OfferBook address…");
-      const offerBookAddr = (await readContract(wagmiConfig, {
-        address: marketAddress as `0x${string}`,
-        abi: MARKET_ABI,
-        functionName: "offerBook",
-      })) as `0x${string}`;
-
-      // Step 2: Cancel offer on OfferBook (not Market!)
+    // The `offers` API/table's `market_address` field is actually the
+    // OfferBook clone's address (offer events are emitted by OfferBook, not
+    // Market) - every caller already has this address on hand from the
+    // offer object itself, so accept it directly instead of re-deriving it
+    // via Market.offerBook(). Passing a real Market address here used to
+    // "work" for callers that happened to resolve one first, but reverted
+    // for anyone who (correctly, per the offers table) passed the OfferBook
+    // address straight through - OfferBook has no offerBook() function.
+    mutationFn: async ({ offerId, offerBookAddress }: { offerId: number; offerBookAddress: string }) => {
+      await ensureLocalChain();
       toast.info("Cancelling offer on-chain…");
       const txHash = await writeContractAsync({
-        address: offerBookAddr,
+        address: offerBookAddress as `0x${string}`,
         abi: OFFER_BOOK_ABI,
         functionName: "cancelOffer",
         args: [BigInt(offerId)],
+        chainId: localChain.id,
       });
-      await publicClient!.waitForTransactionReceipt({ hash: txHash });
+      const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
+      if (receipt.status !== "success") throw new Error("Cancel transaction reverted on-chain — the offer may already be fully filled or cancelled");
 
       // Step 3: Sync backend (best-effort)
       try {
@@ -186,10 +245,11 @@ export function useCancelOffer() {
 }
 
 export function useQuote(params?: QuoteRequest) {
+  const { data: offerBookAddr } = useOfferBookAddress(params?.market_address);
   return useQuery({
     queryKey: queryKeys.offers.quote(params),
-    queryFn: () => offerService.getQuote(params!),
-    enabled: !!params?.market_address && !!params.borrow_amount,
+    queryFn: () => offerService.getQuote({ ...params!, market_address: offerBookAddr! }),
+    enabled: !!params?.market_address && !!params.borrow_amount && !!offerBookAddr,
   });
 }
 
@@ -206,16 +266,19 @@ export interface CleanupExpiredOffersParams {
 export function useCleanupExpiredOffers() {
   const qc = useQueryClient();
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient();
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({ marketAddress, maxCleanup = 10 }: CleanupExpiredOffersParams) => {
+      await ensureLocalChain();
       // Get OfferBook address from Market contract
       toast.info("Getting OfferBook address…");
       const offerBookAddr = (await readContract(wagmiConfig, {
         address: marketAddress as `0x${string}`,
         abi: MARKET_ABI,
         functionName: "offerBook",
+        chainId: localChain.id,
       })) as `0x${string}`;
 
       // Call OfferBook.cleanupExpiredOffers()
@@ -225,9 +288,11 @@ export function useCleanupExpiredOffers() {
         abi: OFFER_BOOK_ABI,
         functionName: "cleanupExpiredOffers",
         args: [BigInt(maxCleanup)],
+        chainId: localChain.id,
       });
 
-      await publicClient!.waitForTransactionReceipt({ hash: txHash });
+      const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
+      if (receipt.status !== "success") throw new Error("Cleanup transaction reverted on-chain");
       return txHash;
     },
     onSuccess: () => {

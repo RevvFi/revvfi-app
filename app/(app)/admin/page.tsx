@@ -3,12 +3,14 @@
 import { useState } from "react";
 import { useAccount } from "wagmi";
 import { useAdminCheck } from "@/hooks/useAdminCheck";
+import { useAuthStore } from "@/store/auth.store";
+import { useSIWE } from "@/hooks/useAuth";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatAddress } from "@/lib/utils";
+import { formatAddress, formatTimestamp } from "@/lib/utils";
 import { toast } from "sonner";
 import { Shield, Settings, Users, BarChart3, Gavel, DollarSign } from "lucide-react";
 import { formatEther } from "viem";
@@ -27,6 +29,11 @@ import {
   useAddBlacklist,
   useRemoveBlacklist,
 } from "@/hooks/useArchController";
+
+import {
+  usePendingBorrowerRequests,
+  useRejectBorrowerRequest,
+} from "@/hooks/useBorrowerRequests";
 
 import {
   usePauseMarket,
@@ -76,6 +83,8 @@ const POSITION_NFT_ADDRESS = (process.env.NEXT_PUBLIC_POSITION_NFT_ADDRESS || ""
 export default function AdminDashboard() {
   const { address } = useAccount();
   const { data: adminCheck, isLoading: adminCheckLoading } = useAdminCheck();
+  const { isAuthenticated } = useAuthStore();
+  const { login, isSigningIn } = useSIWE();
   const [activeTab, setActiveTab] = useState("overview");
 
   // Form states
@@ -120,6 +129,8 @@ export default function AdminDashboard() {
   const setFeeRecipient = useSetFeeRecipient();
   const registerBorrower = useRegisterBorrower();
   const removeBorrower = useRemoveBorrower();
+  const { data: pendingRequests, isLoading: pendingRequestsLoading } = usePendingBorrowerRequests("pending");
+  const rejectBorrowerRequest = useRejectBorrowerRequest();
   const addBlacklist = useAddBlacklist();
   const removeBlacklist = useRemoveBlacklist();
   const pauseMarket = usePauseMarket();
@@ -138,6 +149,28 @@ export default function AdminDashboard() {
   const setMinCollateralRatioMutation = useSetMinCollateralRatio();
   const setLiquidationThresholdMutation = useSetLiquidationThreshold();
   const setOraclePrice = useSetOraclePrice();
+
+  // The admin check itself requires a signed-in (SIWE) session — asking
+  // "is this address an admin?" before signing in just 401s, which would
+  // otherwise be indistinguishable from a genuine non-admin wallet. Surface
+  // this as "please sign in" instead of a hard access-denied screen.
+  if (address && !isAuthenticated) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-surface">
+        <Card className="p-8 max-w-md text-center">
+          <Shield className="h-16 w-16 mx-auto mb-4 text-amber-400" />
+          <h2 className="text-2xl font-bold text-on-surface mb-2">Sign In Required</h2>
+          <p className="text-on-surface-variant mb-4">
+            Sign in with your wallet to verify admin access.
+          </p>
+          <p className="text-sm text-on-surface-variant/60 mono mb-4">{formatAddress(address)}</p>
+          <Button onClick={() => login()} loading={isSigningIn}>
+            Sign In
+          </Button>
+        </Card>
+      </div>
+    );
+  }
 
   if (adminCheckLoading) {
     return (
@@ -374,6 +407,55 @@ export default function AdminDashboard() {
 
         {/* BORROWERS TAB */}
         <TabsContent value="borrowers" className="space-y-4">
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-on-surface">Pending Access Requests</h3>
+              {!!pendingRequests?.count && (
+                <span className="text-xs font-medium text-amber-400 bg-amber-400/10 border border-amber-400/20 rounded-full px-2 py-0.5">
+                  {pendingRequests.count} pending
+                </span>
+              )}
+            </div>
+            {pendingRequestsLoading ? (
+              <Skeleton className="h-16" />
+            ) : !pendingRequests?.requests.length ? (
+              <p className="text-sm text-on-surface-variant">No pending borrower access requests.</p>
+            ) : (
+              <div className="space-y-2">
+                {pendingRequests.requests.map((req) => (
+                  <div
+                    key={req.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-outline-variant/20 bg-surface-container-low p-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-mono text-on-surface truncate">{req.wallet_address}</p>
+                      <p className="text-xs text-on-surface-variant mt-0.5">
+                        Requested {formatTimestamp(req.requested_at)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => rejectBorrowerRequest.mutate({ id: req.id })}
+                        loading={rejectBorrowerRequest.isPending && rejectBorrowerRequest.variables?.id === req.id}
+                      >
+                        Reject
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => registerBorrower.mutate({ borrower: req.wallet_address as `0x${string}` })}
+                        loading={registerBorrower.isPending && registerBorrower.variables?.borrower === req.wallet_address}
+                      >
+                        Approve
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
           <Card className="p-6">
             <h3 className="text-lg font-semibold text-on-surface mb-4">Register Borrower</h3>
             <div className="space-y-3">

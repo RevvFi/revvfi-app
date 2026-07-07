@@ -204,7 +204,7 @@ export function TopNav() {
             {[
               { href: "/about", label: "About" },
               { href: "/team", label: "Team" },
-              { href: "/support", label: "Support" },
+              { href: "/invest", label: "Invest" },
               { href: "/contribute", label: "Contribute" },
               { href: "/contact", label: "Contact" },
               { href: "/terms", label: "Terms" },

@@ -30,6 +30,7 @@ export function CountUp({
     if (!isInView || !ref.current) return;
 
     let startTime: number | null = null;
+    let frameId: number;
     const totalDuration = duration * 1000;
 
     function formatValue(val: number): string {
@@ -45,10 +46,11 @@ export function CountUp({
       // ease-out cubic
       const eased = 1 - Math.pow(1 - progress, 3);
       if (ref.current) ref.current.textContent = formatValue(eased * end);
-      if (progress < 1) requestAnimationFrame(step);
+      if (progress < 1) frameId = requestAnimationFrame(step);
     }
 
-    requestAnimationFrame(step);
+    frameId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frameId);
   }, [isInView, end, duration, prefix, suffix, separator, decimals]);
 
   return (

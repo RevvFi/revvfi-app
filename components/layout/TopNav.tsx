@@ -4,10 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { useAccount } from "wagmi";
 import { cn } from "@/lib/utils";
 import { ConnectWalletButton } from "@/components/wallet/ConnectWalletButton";
 import { Settings, Menu, X, Search } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
+import { localChain, CHAIN_NAMES } from "@/constants/chains";
 
 const NAV_ITEMS = [
   { href: "/dashboard",  label: "Dashboard"  },
@@ -34,6 +36,8 @@ function navCls(active: boolean) {
 export function TopNav() {
   const pathname = usePathname();
   const { user } = useAuthStore();
+  const { chain } = useAccount();
+  const activeChainName = CHAIN_NAMES[chain?.id ?? localChain.id] ?? localChain.name;
   const isAdmin = user?.role === "admin";
   const [mobileOpen, setMobileOpen] = useState(false);
   function openSearch() {
@@ -193,7 +197,23 @@ export function TopNav() {
               className="rounded-full object-contain"
             />
             <span className="h-1.5 w-1.5 rounded-full bg-[#22C55E]" />
-            Ethereum Mainnet
+            {activeChainName}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-6 pb-4 text-[11px] text-on-surface-variant/70">
+            {[
+              { href: "/about", label: "About" },
+              { href: "/team", label: "Team" },
+              { href: "/support", label: "Support" },
+              { href: "/contribute", label: "Contribute" },
+              { href: "/contact", label: "Contact" },
+              { href: "/terms", label: "Terms" },
+              { href: "/privacy", label: "Privacy" },
+            ].map((l) => (
+              <Link key={l.href} href={l.href} onClick={() => setMobileOpen(false)}>
+                {l.label}
+              </Link>
+            ))}
           </div>
         </div>
       )}

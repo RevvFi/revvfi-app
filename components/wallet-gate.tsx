@@ -1,8 +1,21 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
+import { Github } from "lucide-react";
 import { useAccount, useConnect } from "wagmi";
 import { markExplicitConnectIntent } from "@/lib/connect-intent";
+import { GITHUB_ORG_URL } from "@/constants/links";
+
+const LEGAL_LINKS = [
+  { href: "/about", label: "About" },
+  { href: "/team", label: "Team" },
+  { href: "/support", label: "Support" },
+  { href: "/contribute", label: "Contribute" },
+  { href: "/contact", label: "Contact" },
+  { href: "/terms", label: "Terms" },
+  { href: "/privacy", label: "Privacy" },
+];
 
 interface WalletGateProps {
   children: React.ReactNode;
@@ -94,8 +107,32 @@ export function WalletPrompt({
 
       {/* Subtle hint */}
       <p className="mt-4 text-[11px] text-on-surface-variant/60">
-        MetaMask · Coinbase · WalletConnect
+        MetaMask · Coinbase · Phantom
       </p>
+
+      {/* GitHub */}
+      <a
+        href={GITHUB_ORG_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-6 flex items-center gap-2 rounded-full border border-outline-variant/40 px-4 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:border-outline-variant transition-colors"
+      >
+        <Github className="h-3.5 w-3.5" />
+        View on GitHub
+      </a>
+
+      {/* Company links */}
+      <nav className="mt-10 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5">
+        {LEGAL_LINKS.map((l) => (
+          <Link
+            key={l.href}
+            href={l.href}
+            className="text-xs text-on-surface-variant/60 hover:text-on-surface-variant transition-colors"
+          >
+            {l.label}
+          </Link>
+        ))}
+      </nav>
     </div>
   );
 }

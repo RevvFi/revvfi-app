@@ -1,8 +1,10 @@
 import { useMutation } from '@tanstack/react-query';
 import { useWriteContract, useReadContract, usePublicClient } from 'wagmi';
+import { localChain } from '@/constants/chains';
 import { Address } from 'viem';
 import { toast } from 'sonner';
 import { wagmiConfig } from '@/providers/wagmi-config';
+import { useEnsureLocalChain } from "@/hooks/useEnsureLocalChain";
 
 const MARKET_ABI = [
   {
@@ -61,14 +63,17 @@ const MARKET_ABI = [
  */
 export function usePauseMarket() {
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({ marketAddress }: { marketAddress: Address }) => {
+      await ensureLocalChain();
       const txHash = await writeContractAsync({
         address: marketAddress,
         abi: MARKET_ABI,
         functionName: 'pause',
+        chainId: localChain.id,
       });
 
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
@@ -89,14 +94,17 @@ export function usePauseMarket() {
  */
 export function useUnpauseMarket() {
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({ marketAddress }: { marketAddress: Address }) => {
+      await ensureLocalChain();
       const txHash = await writeContractAsync({
         address: marketAddress,
         abi: MARKET_ABI,
         functionName: 'unpause',
+        chainId: localChain.id,
       });
 
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
@@ -117,15 +125,18 @@ export function useUnpauseMarket() {
  */
 export function useSetGuardian() {
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({ marketAddress, guardianAddress }: { marketAddress: Address; guardianAddress: Address }) => {
+      await ensureLocalChain();
       const txHash = await writeContractAsync({
         address: marketAddress,
         abi: MARKET_ABI,
         functionName: 'setGuardian',
         args: [guardianAddress],
+        chainId: localChain.id,
       });
 
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
@@ -146,14 +157,17 @@ export function useSetGuardian() {
  */
 export function useEndLiquidation() {
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({ marketAddress }: { marketAddress: Address }) => {
+      await ensureLocalChain();
       const txHash = await writeContractAsync({
         address: marketAddress,
         abi: MARKET_ABI,
         functionName: 'endLiquidation',
+        chainId: localChain.id,
       });
 
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
@@ -179,7 +193,8 @@ export function useMarketStatus(marketAddress: Address | undefined) {
     functionName: 'paused',
     query: {
       enabled: !!marketAddress,
-    }
+    },
+    chainId: localChain.id,
   });
 
   const { data: isLiquidating } = useReadContract({
@@ -188,7 +203,8 @@ export function useMarketStatus(marketAddress: Address | undefined) {
     functionName: 'isLiquidating',
     query: {
       enabled: !!marketAddress,
-    }
+    },
+    chainId: localChain.id,
   });
 
   const { data: guardian } = useReadContract({
@@ -197,7 +213,8 @@ export function useMarketStatus(marketAddress: Address | undefined) {
     functionName: 'guardian',
     query: {
       enabled: !!marketAddress,
-    }
+    },
+    chainId: localChain.id,
   });
 
   return {

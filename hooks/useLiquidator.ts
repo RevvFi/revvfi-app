@@ -1,8 +1,10 @@
 import { useMutation } from '@tanstack/react-query';
 import { useWriteContract, useReadContract, usePublicClient } from 'wagmi';
+import { localChain } from '@/constants/chains';
 import { Address, parseUnits } from 'viem';
 import { toast } from 'sonner';
 import { wagmiConfig } from '@/providers/wagmi-config';
+import { useEnsureLocalChain } from "@/hooks/useEnsureLocalChain";
 
 const LIQUIDATOR_ABI = [
   {
@@ -77,7 +79,8 @@ const ERC20_ABI = [
  */
 export function usePlaceBid(liquidatorAddress: Address) {
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({
@@ -91,6 +94,7 @@ export function usePlaceBid(liquidatorAddress: Address) {
       borrowAssetAddress: Address;
       borrowAssetDecimals: number;
     }) => {
+      await ensureLocalChain();
       const bidWei = parseUnits(bidAmount, borrowAssetDecimals);
 
       // Step 1: Approve tokens
@@ -99,9 +103,11 @@ export function usePlaceBid(liquidatorAddress: Address) {
         abi: ERC20_ABI,
         functionName: 'approve',
         args: [liquidatorAddress, bidWei],
+        chainId: localChain.id,
       });
 
-      await publicClient!.waitForTransactionReceipt({ hash: approveTxHash });
+      const approveReceipt = await publicClient!.waitForTransactionReceipt({ hash: approveTxHash });
+      if (approveReceipt.status !== 'success') throw new Error('Approval transaction failed');
 
       // Step 2: Place bid
       const bidTxHash = await writeContractAsync({
@@ -109,6 +115,7 @@ export function usePlaceBid(liquidatorAddress: Address) {
         abi: LIQUIDATOR_ABI,
         functionName: 'placeBid',
         args: [BigInt(auctionId), bidWei],
+        chainId: localChain.id,
       });
 
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: bidTxHash });
@@ -129,15 +136,18 @@ export function usePlaceBid(liquidatorAddress: Address) {
  */
 export function useSettleAuction(liquidatorAddress: Address) {
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({ auctionId }: { auctionId: number }) => {
+      await ensureLocalChain();
       const txHash = await writeContractAsync({
         address: liquidatorAddress,
         abi: LIQUIDATOR_ABI,
         functionName: 'settleAuction',
         args: [BigInt(auctionId)],
+        chainId: localChain.id,
       });
 
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
@@ -165,7 +175,8 @@ export function useCurrentPrice(liquidatorAddress: Address | undefined, auctionI
     query: {
       enabled: !!liquidatorAddress && auctionId !== undefined,
       refetchInterval: 10000, // Refresh every 10 seconds
-    }
+    },
+    chainId: localChain.id,
   });
 }
 
@@ -181,6 +192,7 @@ export function useAuctionDetails(liquidatorAddress: Address | undefined, auctio
     query: {
       enabled: !!liquidatorAddress && auctionId !== undefined,
       refetchInterval: 10000, // Refresh every 10 seconds
-    }
+    },
+    chainId: localChain.id,
   });
 }

@@ -2,9 +2,11 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWriteContract, usePublicClient } from 'wagmi';
+import { localChain } from '@/constants/chains';
 import { type Address } from 'viem';
 import { toast } from 'sonner';
 import { wagmiConfig } from '@/providers/wagmi-config';
+import { useEnsureLocalChain } from "@/hooks/useEnsureLocalChain";
 
 const POSITION_NFT_ABI = [
   {
@@ -46,16 +48,19 @@ export interface RegisterMarketParams {
  */
 export function useRegisterMarket() {
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ marketAddress }: RegisterMarketParams) => {
+      await ensureLocalChain();
       const txHash = await writeContractAsync({
         address: POSITION_NFT_ADDRESS,
         abi: POSITION_NFT_ABI,
         functionName: 'registerMarket',
         args: [marketAddress],
+        chainId: localChain.id,
       });
 
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
@@ -86,16 +91,19 @@ export function useRegisterMarket() {
  */
 export function useUnregisterMarket() {
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ marketAddress }: RegisterMarketParams) => {
+      await ensureLocalChain();
       const txHash = await writeContractAsync({
         address: POSITION_NFT_ADDRESS,
         abi: POSITION_NFT_ABI,
         functionName: 'unregisterMarket',
         args: [marketAddress],
+        chainId: localChain.id,
       });
 
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
@@ -131,15 +139,18 @@ export interface SetBaseURIParams {
  */
 export function useSetBaseURI() {
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({ baseURI }: SetBaseURIParams) => {
+      await ensureLocalChain();
       const txHash = await writeContractAsync({
         address: POSITION_NFT_ADDRESS,
         abi: POSITION_NFT_ABI,
         functionName: 'setBaseURI',
         args: [baseURI],
+        chainId: localChain.id,
       });
 
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });

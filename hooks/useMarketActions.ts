@@ -2,11 +2,13 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWriteContract, usePublicClient } from 'wagmi';
+import { localChain } from '@/constants/chains';
 import { erc20Abi, type Address } from 'viem';
 import { toast } from 'sonner';
 import { wagmiConfig } from '@/providers/wagmi-config';
 import { MARKET_ABI } from '@/lib/contracts/abis';
 import { queryKeys } from '@/constants/query-keys';
+import { useEnsureLocalChain } from "@/hooks/useEnsureLocalChain";
 
 /**
  * Hook for additional market actions (repayFull, closeMarket, forceCloseMarket)
@@ -25,10 +27,12 @@ export interface RepayFullParams {
 export function useRepayFull() {
   const qc = useQueryClient();
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({ marketAddress, borrowAssetAddress }: RepayFullParams) => {
+      await ensureLocalChain();
       const marketAddr = marketAddress as Address;
       const tokenAddr = borrowAssetAddress as Address;
 
@@ -51,8 +55,10 @@ export function useRepayFull() {
         abi: erc20Abi,
         functionName: 'approve',
         args: [marketAddr, totalOwed],
+        chainId: localChain.id,
       });
-      await publicClient!.waitForTransactionReceipt({ hash: approveTx });
+      const approveReceipt = await publicClient!.waitForTransactionReceipt({ hash: approveTx });
+      if (approveReceipt.status !== 'success') throw new Error('Approval transaction failed');
 
       // Step 3: Call Market.repayFull()
       toast.info('Step 2/2: Repaying full debt...');
@@ -60,6 +66,7 @@ export function useRepayFull() {
         address: marketAddr,
         abi: MARKET_ABI,
         functionName: 'repayFull',
+        chainId: localChain.id,
       });
 
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: repayTx });
@@ -101,15 +108,18 @@ export interface CloseMarketParams {
 export function useCloseMarket() {
   const qc = useQueryClient();
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({ marketAddress }: CloseMarketParams) => {
+      await ensureLocalChain();
       toast.info('Closing market...');
       const txHash = await writeContractAsync({
         address: marketAddress as Address,
         abi: MARKET_ABI,
         functionName: 'closeMarket',
+        chainId: localChain.id,
       });
 
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
@@ -146,15 +156,18 @@ export function useCloseMarket() {
 export function useForceCloseMarket() {
   const qc = useQueryClient();
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({ marketAddress }: CloseMarketParams) => {
+      await ensureLocalChain();
       toast.info('Force closing market...');
       const txHash = await writeContractAsync({
         address: marketAddress as Address,
         abi: MARKET_ABI,
         functionName: 'forceCloseMarket',
+        chainId: localChain.id,
       });
 
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });

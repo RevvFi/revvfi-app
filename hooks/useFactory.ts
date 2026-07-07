@@ -1,8 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { usePublicClient, useWriteContract, useReadContract } from 'wagmi';
+import { localChain } from '@/constants/chains';
 import { parseEther, Address } from 'viem';
 import { wagmiConfig } from '@/providers/wagmi-config';
 import { toast } from 'sonner';
+import { useEnsureLocalChain } from "@/hooks/useEnsureLocalChain";
 
 const FACTORY_ABI = [
   {
@@ -78,6 +80,7 @@ export function useDeploymentFee() {
     address: FACTORY_ADDRESS,
     abi: FACTORY_ABI,
     functionName: 'deploymentFee',
+    chainId: localChain.id,
   });
 }
 
@@ -86,6 +89,7 @@ export function useFeeRecipient() {
     address: FACTORY_ADDRESS,
     abi: FACTORY_ABI,
     functionName: 'feeRecipient',
+    chainId: localChain.id,
   });
 }
 
@@ -94,6 +98,7 @@ export function usePendingArchController() {
     address: FACTORY_ADDRESS,
     abi: FACTORY_ABI,
     functionName: 'pendingArchController',
+    chainId: localChain.id,
   });
 }
 
@@ -102,17 +107,20 @@ export function useArchControllerUpdateTime() {
     address: FACTORY_ADDRESS,
     abi: FACTORY_ABI,
     functionName: 'archControllerUpdateTime',
+    chainId: localChain.id,
   });
 }
 
 // Write hooks
 export function useSetDeploymentFee() {
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ feeInEther }: { feeInEther: string }) => {
+      await ensureLocalChain();
       const feeWei = parseEther(feeInEther);
 
       const txHash = await writeContractAsync({
@@ -120,6 +128,7 @@ export function useSetDeploymentFee() {
         abi: FACTORY_ABI,
         functionName: 'setDeploymentFee',
         args: [feeWei],
+        chainId: localChain.id,
       });
 
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
@@ -143,16 +152,19 @@ export function useSetDeploymentFee() {
 
 export function useSetFeeRecipient() {
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ recipient }: { recipient: Address }) => {
+      await ensureLocalChain();
       const txHash = await writeContractAsync({
         address: FACTORY_ADDRESS,
         abi: FACTORY_ABI,
         functionName: 'setFeeRecipient',
         args: [recipient],
+        chainId: localChain.id,
       });
 
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
@@ -176,16 +188,19 @@ export function useSetFeeRecipient() {
 
 export function useRequestArchControllerUpdate() {
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ newArchController }: { newArchController: Address }) => {
+      await ensureLocalChain();
       const txHash = await writeContractAsync({
         address: FACTORY_ADDRESS,
         abi: FACTORY_ABI,
         functionName: 'requestArchControllerUpdate',
         args: [newArchController],
+        chainId: localChain.id,
       });
 
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
@@ -210,15 +225,18 @@ export function useRequestArchControllerUpdate() {
 
 export function useExecuteArchControllerUpdate() {
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async () => {
+      await ensureLocalChain();
       const txHash = await writeContractAsync({
         address: FACTORY_ADDRESS,
         abi: FACTORY_ABI,
         functionName: 'executeArchControllerUpdate',
+        chainId: localChain.id,
       });
 
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
@@ -247,15 +265,18 @@ export function useExecuteArchControllerUpdate() {
 
 export function useCancelArchControllerUpdate() {
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async () => {
+      await ensureLocalChain();
       const txHash = await writeContractAsync({
         address: FACTORY_ADDRESS,
         abi: FACTORY_ABI,
         functionName: 'cancelArchControllerUpdate',
+        chainId: localChain.id,
       });
 
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });

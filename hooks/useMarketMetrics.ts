@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { usePublicClient } from 'wagmi';
+import { localChain } from '@/constants/chains';
 import { type Address } from 'viem';
 import { wagmiConfig } from '@/providers/wagmi-config';
 import { MARKET_ABI } from '@/lib/contracts/abis';
@@ -15,7 +16,7 @@ import { MARKET_ABI } from '@/lib/contracts/abis';
  * Get total debt owed by borrower (principal + accrued interest)
  */
 export function useTotalOwed(marketAddress: Address | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['market', 'totalOwed', marketAddress],
@@ -37,7 +38,7 @@ export function useTotalOwed(marketAddress: Address | undefined) {
  * Get current principal (without accrued interest)
  */
 export function useCurrentPrincipal(marketAddress: Address | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['market', 'currentPrincipal', marketAddress],
@@ -59,7 +60,7 @@ export function useCurrentPrincipal(marketAddress: Address | undefined) {
  * Get total collateral value
  */
 export function useTotalAssets(marketAddress: Address | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['market', 'totalAssets', marketAddress],
@@ -82,7 +83,7 @@ export function useTotalAssets(marketAddress: Address | undefined) {
  * Returns ratio * 10000 (e.g., 15000 = 150% collateralization)
  */
 export function useCollateralRatio(marketAddress: Address | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['market', 'collateralRatio', marketAddress],
@@ -104,7 +105,7 @@ export function useCollateralRatio(marketAddress: Address | undefined) {
  * Check if market position is healthy (above liquidation threshold)
  */
 export function useIsHealthy(marketAddress: Address | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['market', 'isHealthy', marketAddress],
@@ -126,7 +127,7 @@ export function useIsHealthy(marketAddress: Address | undefined) {
  * Check if market position can be liquidated
  */
 export function useIsLiquidatable(marketAddress: Address | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['market', 'isLiquidatable', marketAddress],
@@ -148,7 +149,7 @@ export function useIsLiquidatable(marketAddress: Address | undefined) {
  * Get maximum amount borrower can borrow given current collateral
  */
 export function useMaxBorrowable(marketAddress: Address | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['market', 'maxBorrowable', marketAddress],
@@ -170,7 +171,7 @@ export function useMaxBorrowable(marketAddress: Address | undefined) {
  * Get claimable amount for a specific position
  */
 export function usePositionClaimable(marketAddress: Address | undefined, positionId: number | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['market', 'positionClaimable', marketAddress, positionId],
@@ -193,7 +194,7 @@ export function usePositionClaimable(marketAddress: Address | undefined, positio
  * Get current value of a position (principal + accrued interest)
  */
 export function usePositionValue(marketAddress: Address | undefined, positionId: number | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['market', 'positionValue', marketAddress, positionId],
@@ -216,7 +217,7 @@ export function usePositionValue(marketAddress: Address | undefined, positionId:
  * Get count of active positions in the market
  */
 export function useActivePositionsCount(marketAddress: Address | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['market', 'activePositionsCount', marketAddress],
@@ -242,7 +243,7 @@ export function useActivePositionsPaginated(
   start: number,
   limit: number
 ) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['market', 'activePositions', marketAddress, start, limit],
@@ -265,7 +266,7 @@ export function useActivePositionsPaginated(
  * Get total debt in the market
  */
 export function useTotalDebt(marketAddress: Address | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['market', 'totalDebt', marketAddress],
@@ -287,7 +288,7 @@ export function useTotalDebt(marketAddress: Address | undefined) {
  * Get current borrow index (compound interest accumulator)
  */
 export function useCurrentDebtIndex(marketAddress: Address | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['market', 'currentDebtIndex', marketAddress],

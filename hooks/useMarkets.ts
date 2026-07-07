@@ -9,7 +9,9 @@ import { queryKeys } from "@/constants/query-keys";
 import { FACTORY_ABI } from "@/lib/contracts/abis";
 import { CONTRACT_ADDRESSES } from "@/lib/contracts/addresses";
 import { wagmiConfig } from "@/providers/wagmi-config";
+import { localChain } from "@/constants/chains";
 import type { CreateMarketRequest } from "@/types";
+import { useEnsureLocalChain } from "@/hooks/useEnsureLocalChain";
 
 export interface DeployMarketParams extends CreateMarketRequest {
   borrower_address: string;
@@ -55,10 +57,12 @@ export function useMarketMetrics(address: string) {
 export function useCreateMarket() {
   const qc = useQueryClient();
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient();
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ chainId: localChain.id });
 
   return useMutation({
     mutationFn: async (payload: DeployMarketParams) => {
+      await ensureLocalChain();
       const {
         borrower_address,
         borrow_asset,
@@ -75,6 +79,7 @@ export function useCreateMarket() {
         address: CONTRACT_ADDRESSES.factory,
         abi: FACTORY_ABI,
         functionName: "deploymentFee",
+        chainId: localChain.id,
       })) as bigint;
 
       toast.info("Deploying market on-chain…");
@@ -94,10 +99,12 @@ export function useCreateMarket() {
           BigInt(liquidation_threshold),
         ],
         value: deploymentFee,
+        chainId: localChain.id,
       });
 
       toast.info("Waiting for confirmation…");
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
+      if (receipt.status !== "success") throw new Error("Market deployment transaction failed");
 
       // Parse MarketDeployed event to get new market address
       let newMarketAddress: string | null = null;

@@ -10,7 +10,9 @@ import { withdrawalService } from "@/services/withdrawal.service";
 import { queryKeys } from "@/constants/query-keys";
 import { MARKET_ABI, LIQUIDITY_QUEUE_ABI } from "@/lib/contracts/abis";
 import { wagmiConfig } from "@/providers/wagmi-config";
+import { localChain } from "@/constants/chains";
 import { useAuthStore } from "@/store/auth.store";
+import { useEnsureLocalChain } from "@/hooks/useEnsureLocalChain";
 
 export function usePositions(params?: PositionsParams) {
   const { isAuthenticated } = useAuthStore();
@@ -18,6 +20,7 @@ export function usePositions(params?: PositionsParams) {
     queryKey: queryKeys.positions.all(params),
     queryFn: () => positionService.getPositions(params),
     enabled: isAuthenticated,
+    refetchInterval: 30_000,
   });
 }
 
@@ -43,25 +46,23 @@ export function usePortfolio() {
 export function useClaimPosition() {
   const qc = useQueryClient();
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient();
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({ tokenId, marketAddress }: { tokenId: number; marketAddress: string }) => {
+      await ensureLocalChain();
       // Call Market.claimFunds(positionId) on-chain
       const txHash = await writeContractAsync({
         address: marketAddress as `0x${string}`,
         abi: MARKET_ABI,
         functionName: "claimFunds",
         args: [BigInt(tokenId)],
+        chainId: localChain.id,
       });
-      await publicClient!.waitForTransactionReceipt({ hash: txHash });
+      const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
+      if (receipt.status !== "success") throw new Error("Transaction failed");
 
-      // Sync backend
-      try {
-        await positionService.claimPosition({ token_id: tokenId });
-      } catch {
-        // non-fatal
-      }
       return txHash;
     },
     onSuccess: () => {
@@ -92,7 +93,8 @@ export interface CreateWithdrawalParams {
 export function useCreateWithdrawal() {
   const qc = useQueryClient();
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient();
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({
@@ -101,6 +103,7 @@ export function useCreateWithdrawal() {
       amount,
       borrowAssetDecimals,
     }: CreateWithdrawalParams) => {
+      await ensureLocalChain();
       const amountWei = parseUnits(amount, borrowAssetDecimals);
 
       // Step 1: Read LiquidityQueue address from Market
@@ -109,6 +112,7 @@ export function useCreateWithdrawal() {
         address: marketAddress as Address,
         abi: MARKET_ABI,
         functionName: "liquidityQueue",
+        chainId: localChain.id,
       })) as Address;
 
       // Step 2: Call LiquidityQueue.requestWithdrawal()
@@ -118,9 +122,11 @@ export function useCreateWithdrawal() {
         abi: LIQUIDITY_QUEUE_ABI,
         functionName: "requestWithdrawal",
         args: [BigInt(positionId), amountWei],
+        chainId: localChain.id,
       });
 
-      await publicClient!.waitForTransactionReceipt({ hash: txHash });
+      const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
+      if (receipt.status !== "success") throw new Error("Transaction failed");
 
       // Step 3: Backend sync (best-effort)
       try {
@@ -161,16 +167,19 @@ export interface CancelWithdrawalParams {
 export function useCancelWithdrawal() {
   const qc = useQueryClient();
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient();
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({ marketAddress, requestId }: CancelWithdrawalParams) => {
+      await ensureLocalChain();
       // Step 1: Read LiquidityQueue address from Market
       toast.info("Getting LiquidityQueue address…");
       const liquidityQueueAddr = (await readContract(wagmiConfig, {
         address: marketAddress as Address,
         abi: MARKET_ABI,
         functionName: "liquidityQueue",
+        chainId: localChain.id,
       })) as Address;
 
       // Step 2: Call LiquidityQueue.cancelWithdrawal()
@@ -180,9 +189,11 @@ export function useCancelWithdrawal() {
         abi: LIQUIDITY_QUEUE_ABI,
         functionName: "cancelWithdrawal",
         args: [BigInt(requestId)],
+        chainId: localChain.id,
       });
 
-      await publicClient!.waitForTransactionReceipt({ hash: txHash });
+      const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
+      if (receipt.status !== "success") throw new Error("Transaction failed");
 
       // Step 3: Backend sync (best-effort)
       try {
@@ -240,7 +251,8 @@ export interface ProcessEpochParams {
 export function useProcessEpoch() {
   const qc = useQueryClient();
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient();
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({
@@ -249,6 +261,7 @@ export function useProcessEpoch() {
       availableLiquidity,
       borrowAssetDecimals,
     }: ProcessEpochParams) => {
+      await ensureLocalChain();
       const liquidityWei = parseUnits(availableLiquidity, borrowAssetDecimals);
 
       // Step 1: Read LiquidityQueue address from Market
@@ -257,6 +270,7 @@ export function useProcessEpoch() {
         address: marketAddress as Address,
         abi: MARKET_ABI,
         functionName: "liquidityQueue",
+        chainId: localChain.id,
       })) as Address;
 
       // Step 2: Call LiquidityQueue.processEpoch()
@@ -266,9 +280,11 @@ export function useProcessEpoch() {
         abi: LIQUIDITY_QUEUE_ABI,
         functionName: "processEpoch",
         args: [BigInt(epochNumber), liquidityWei],
+        chainId: localChain.id,
       });
 
-      await publicClient!.waitForTransactionReceipt({ hash: txHash });
+      const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
+      if (receipt.status !== "success") throw new Error("Transaction failed");
       return txHash;
     },
     onSuccess: () => {
@@ -296,26 +312,26 @@ export function useProcessEpoch() {
 /**
  * Claim a processed withdrawal
  *
- * NOTE: The smart contract has onlyMarket modifier on claimWithdrawal,
- * but the function logic checks msg.sender == lender, which would fail
- * if called through Market. This appears to be a smart contract bug.
- *
- * This implementation assumes the modifier will be fixed to allow direct user calls.
- * If not fixed, this function will revert with "UnauthorizedCaller".
+ * NOTE: claimWithdrawal has an onlyMarket modifier but its logic checks
+ * msg.sender == lender - calling directly may revert with "UnauthorizedCaller"
+ * until that's fixed contract-side.
  */
 export function useClaimWithdrawal() {
   const qc = useQueryClient();
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient();
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({ marketAddress, requestId }: ClaimWithdrawalParams) => {
+      await ensureLocalChain();
       // Step 1: Read LiquidityQueue address from Market
       toast.info("Getting LiquidityQueue address…");
       const liquidityQueueAddr = (await readContract(wagmiConfig, {
         address: marketAddress as Address,
         abi: MARKET_ABI,
         functionName: "liquidityQueue",
+        chainId: localChain.id,
       })) as Address;
 
       // Step 2: Read withdrawal request details to get fulfilled amount
@@ -346,9 +362,11 @@ export function useClaimWithdrawal() {
         abi: LIQUIDITY_QUEUE_ABI,
         functionName: "claimWithdrawal",
         args: [BigInt(requestId), fulfilledAmount],
+        chainId: localChain.id,
       });
 
-      await publicClient!.waitForTransactionReceipt({ hash: txHash });
+      const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
+      if (receipt.status !== "success") throw new Error("Transaction failed");
 
       return txHash;
     },

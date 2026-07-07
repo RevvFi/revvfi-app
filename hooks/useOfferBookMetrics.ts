@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { usePublicClient } from 'wagmi';
 import { type Address, parseUnits } from 'viem';
 import { wagmiConfig } from '@/providers/wagmi-config';
+import { localChain } from '@/constants/chains';
 import { MARKET_ABI, OFFER_BOOK_ABI } from '@/lib/contracts/abis';
 import { readContract } from '@wagmi/core';
 
@@ -16,7 +17,7 @@ import { readContract } from '@wagmi/core';
  * Get a single offer by ID
  */
 export function useOffer(marketAddress: Address | undefined, offerId: number | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['offerBook', 'offer', marketAddress, offerId],
@@ -28,6 +29,7 @@ export function useOffer(marketAddress: Address | undefined, offerId: number | u
         address: marketAddress,
         abi: MARKET_ABI,
         functionName: 'offerBook',
+        chainId: localChain.id,
       })) as Address;
 
       const result = await publicClient!.readContract({
@@ -48,7 +50,7 @@ export function useOffer(marketAddress: Address | undefined, offerId: number | u
  * Get all offers by a specific lender
  */
 export function useLenderOffers(marketAddress: Address | undefined, lenderAddress: Address | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['offerBook', 'lenderOffers', marketAddress, lenderAddress],
@@ -60,6 +62,7 @@ export function useLenderOffers(marketAddress: Address | undefined, lenderAddres
         address: marketAddress,
         abi: MARKET_ABI,
         functionName: 'offerBook',
+        chainId: localChain.id,
       })) as Address;
 
       const result = await publicClient!.readContract({
@@ -80,7 +83,7 @@ export function useLenderOffers(marketAddress: Address | undefined, lenderAddres
  * Get total liquidity available across all active offers
  */
 export function useTotalLiquidityAvailable(marketAddress: Address | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['offerBook', 'totalLiquidity', marketAddress],
@@ -92,6 +95,7 @@ export function useTotalLiquidityAvailable(marketAddress: Address | undefined) {
         address: marketAddress,
         abi: MARKET_ABI,
         functionName: 'offerBook',
+        chainId: localChain.id,
       })) as Address;
 
       const result = await publicClient!.readContract({
@@ -111,7 +115,7 @@ export function useTotalLiquidityAvailable(marketAddress: Address | undefined) {
  * Get count of active offers in the offer book
  */
 export function useActiveOfferCount(marketAddress: Address | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['offerBook', 'activeOfferCount', marketAddress],
@@ -123,6 +127,7 @@ export function useActiveOfferCount(marketAddress: Address | undefined) {
         address: marketAddress,
         abi: MARKET_ABI,
         functionName: 'offerBook',
+        chainId: localChain.id,
       })) as Address;
 
       const result = await publicClient!.readContract({
@@ -149,7 +154,7 @@ export function useBestOffers(
   borrowAssetDecimals: number,
   useSeniorOnly: boolean
 ) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['offerBook', 'bestOffers', marketAddress, amount, useSeniorOnly],
@@ -163,6 +168,7 @@ export function useBestOffers(
         address: marketAddress,
         abi: MARKET_ABI,
         functionName: 'offerBook',
+        chainId: localChain.id,
       })) as Address;
 
       // Parse amount to wei

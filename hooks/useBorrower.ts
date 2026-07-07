@@ -2,12 +2,14 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useWriteContract, usePublicClient } from "wagmi";
+import { localChain } from "@/constants/chains";
 import { erc20Abi, parseUnits, type Address } from "viem";
 import { toast } from "sonner";
 import { borrowerService } from "@/services/borrower.service";
 import { queryKeys } from "@/constants/query-keys";
 import { MARKET_ABI } from "@/lib/contracts/abis";
 import type { RepayRequest } from "@/types";
+import { useEnsureLocalChain } from "@/hooks/useEnsureLocalChain";
 
 export function useBorrower(address: string) {
   return useQuery({
@@ -48,7 +50,8 @@ export interface DepositCollateralParams {
 export function useDepositCollateral() {
   const qc = useQueryClient();
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient();
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({
@@ -57,6 +60,7 @@ export function useDepositCollateral() {
       collateralAssetDecimals,
       amount,
     }: DepositCollateralParams) => {
+      await ensureLocalChain();
       const amountWei = parseUnits(amount, collateralAssetDecimals);
       const marketAddr = marketAddress as Address;
       const tokenAddr = collateralAssetAddress as Address;
@@ -68,9 +72,11 @@ export function useDepositCollateral() {
         address: tokenAddr,
         abi: erc20Abi,
         functionName: "approve",
-        args: [marketAddr, amountWei], // ← Approve to Market, not Escrow!
+        args: [marketAddr, amountWei], // ← Approve to Market, not Escrow!,
+        chainId: localChain.id,
       });
-      await publicClient!.waitForTransactionReceipt({ hash: approveTx });
+      const approveReceipt = await publicClient!.waitForTransactionReceipt({ hash: approveTx });
+      if (approveReceipt.status !== "success") throw new Error("Approval transaction failed");
 
       // Step 2 — deposit via Market.depositCollateral(amount)
       toast.info("Step 2/2: Depositing collateral on-chain…");
@@ -79,13 +85,15 @@ export function useDepositCollateral() {
         abi: MARKET_ABI,
         functionName: "depositCollateral",
         args: [amountWei],
+        chainId: localChain.id,
       });
-      await publicClient!.waitForTransactionReceipt({ hash: depositTx });
+      const depositReceipt = await publicClient!.waitForTransactionReceipt({ hash: depositTx });
+      if (depositReceipt.status !== "success") throw new Error("Deposit transaction failed");
       return depositTx;
     },
     onSuccess: (txHash) => {
       // Borrower record + all on-chain market-health reads (collateral ratio, totalAssets, etc.)
-      qc.invalidateQueries({ queryKey: queryKeys.borrowers.detail("") });
+      qc.invalidateQueries({ queryKey: ["borrowers", "detail"] });
       qc.invalidateQueries({ queryKey: ["market"] });
       toast.success(`Collateral deposited · ${txHash.slice(0, 10)}…`);
     },
@@ -113,7 +121,8 @@ export interface WithdrawCollateralParams {
 export function useWithdrawCollateral() {
   const qc = useQueryClient();
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient();
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({
@@ -121,18 +130,21 @@ export function useWithdrawCollateral() {
       collateralAssetDecimals,
       amount,
     }: WithdrawCollateralParams) => {
+      await ensureLocalChain();
       const amountWei = parseUnits(amount, collateralAssetDecimals);
       const txHash = await writeContractAsync({
         address: marketAddress as Address,
         abi: MARKET_ABI,
         functionName: "withdrawCollateral",
         args: [amountWei],
+        chainId: localChain.id,
       });
-      await publicClient!.waitForTransactionReceipt({ hash: txHash });
+      const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
+      if (receipt.status !== "success") throw new Error("Withdrawal transaction failed");
       return txHash;
     },
     onSuccess: (txHash) => {
-      qc.invalidateQueries({ queryKey: queryKeys.borrowers.detail("") });
+      qc.invalidateQueries({ queryKey: ["borrowers", "detail"] });
       qc.invalidateQueries({ queryKey: ["market"] });
       toast.success(`Collateral withdrawn · ${txHash.slice(0, 10)}…`);
     },
@@ -140,10 +152,12 @@ export function useWithdrawCollateral() {
       console.error("Withdraw collateral failed:", e);
       if (e.message?.includes("User rejected")) {
         toast.error("Transaction rejected by user");
-      } else if (e.message?.includes("InsufficientCollateral") || e.message?.includes("ExceedsCollateral")) {
-        toast.error("Withdrawal exceeds available collateral");
-      } else if (e.message?.includes("WouldBeLiquidatable")) {
-        toast.error("Cannot withdraw — position would become liquidatable");
+      } else if (e.message?.includes("InsufficientCollateral")) {
+        // The contract reuses this one error for two distinct checks - either
+        // the amount exceeds your deposited balance, or it would drop your
+        // remaining collateral below the minimum ratio required by your debt.
+        // There's no way to tell which from the error alone, so say both.
+        toast.error("Withdrawal blocked: either it exceeds your deposited collateral, or it would drop your collateral ratio below the minimum required while you have outstanding debt.");
       } else {
         toast.error(e.message || "Collateral withdrawal failed");
       }
@@ -162,10 +176,12 @@ export interface BorrowOnChainParams {
 export function useBorrow() {
   const qc = useQueryClient();
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient();
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ chainId: localChain.id });
 
   return useMutation({
     mutationFn: async (payload: BorrowOnChainParams) => {
+      await ensureLocalChain();
       const {
         market_address,
         borrow_amount,
@@ -187,6 +203,7 @@ export function useBorrow() {
         abi: MARKET_ABI,
         functionName: "borrow",
         args: [borrowAmountWei, use_senior_only, BigInt(max_apr)],
+        chainId: localChain.id,
       });
 
       toast.info("Waiting for confirmation…");
@@ -202,7 +219,7 @@ export function useBorrow() {
       qc.invalidateQueries({ queryKey: queryKeys.positions.all() });
       qc.invalidateQueries({ queryKey: queryKeys.positions.portfolio });
       qc.invalidateQueries({ queryKey: queryKeys.markets.all() });
-      qc.invalidateQueries({ queryKey: queryKeys.borrowers.detail("") });
+      qc.invalidateQueries({ queryKey: ["borrowers", "detail"] });
       // Risk score and health factor
       qc.invalidateQueries({ queryKey: ["borrowers", "risk"] });
       // All on-chain market reads (debt, collateral ratio, health, max-borrowable)
@@ -237,10 +254,12 @@ export interface RepayOnChainParams extends RepayRequest {
 export function useRepay() {
   const qc = useQueryClient();
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient();
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ chainId: localChain.id });
 
   return useMutation({
     mutationFn: async (payload: RepayOnChainParams) => {
+      await ensureLocalChain();
       const { market_address, amount, borrow_asset_address, borrow_asset_decimals } = payload;
       const amountWei = parseUnits(amount, borrow_asset_decimals);
 
@@ -251,8 +270,10 @@ export function useRepay() {
         abi: erc20Abi,
         functionName: "approve",
         args: [market_address as Address, amountWei],
+        chainId: localChain.id,
       });
-      await publicClient!.waitForTransactionReceipt({ hash: approveTx });
+      const approveReceipt = await publicClient!.waitForTransactionReceipt({ hash: approveTx });
+      if (approveReceipt.status !== "success") throw new Error("Approval transaction failed");
 
       // Step 2 — call Market.repay() directly
       toast.info("Step 2/2: Submitting repayment…");
@@ -261,6 +282,7 @@ export function useRepay() {
         abi: MARKET_ABI,
         functionName: "repay",
         args: [amountWei],
+        chainId: localChain.id,
       });
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: repayTx });
 
@@ -271,7 +293,7 @@ export function useRepay() {
       return repayTx;
     },
     onSuccess: (txHash) => {
-      qc.invalidateQueries({ queryKey: queryKeys.borrowers.detail("") });
+      qc.invalidateQueries({ queryKey: ["borrowers", "detail"] });
       qc.invalidateQueries({ queryKey: queryKeys.positions.all() });
       qc.invalidateQueries({ queryKey: queryKeys.positions.portfolio });
       qc.invalidateQueries({ queryKey: queryKeys.markets.all() });

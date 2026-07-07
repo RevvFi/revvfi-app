@@ -1,8 +1,10 @@
 import { useMutation } from '@tanstack/react-query';
 import { useWriteContract, useReadContract, usePublicClient } from 'wagmi';
+import { localChain } from '@/constants/chains';
 import { Address } from 'viem';
 import { toast } from 'sonner';
 import { wagmiConfig } from '@/providers/wagmi-config';
+import { useEnsureLocalChain } from "@/hooks/useEnsureLocalChain";
 
 const ORACLE_ABI = [
   {
@@ -39,10 +41,12 @@ const ORACLE_ABI = [
  */
 export function useSetOraclePrice() {
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({ oracleAddress, price }: { oracleAddress: Address; price: string }) => {
+      await ensureLocalChain();
       // Convert price to proper format (assuming 8 decimals for most oracles)
       const priceWei = BigInt(Math.floor(parseFloat(price) * 1e8));
 
@@ -51,6 +55,7 @@ export function useSetOraclePrice() {
         abi: ORACLE_ABI,
         functionName: 'setLatestPrice',
         args: [priceWei],
+        chainId: localChain.id,
       });
 
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
@@ -76,7 +81,8 @@ export function useOraclePrice(oracleAddress: Address | undefined) {
     functionName: 'latestRoundData',
     query: {
       enabled: !!oracleAddress,
-    }
+    },
+    chainId: localChain.id,
   });
 
   const { data: decimals } = useReadContract({
@@ -85,7 +91,8 @@ export function useOraclePrice(oracleAddress: Address | undefined) {
     functionName: 'decimals',
     query: {
       enabled: !!oracleAddress,
-    }
+    },
+    chainId: localChain.id,
   });
 
   const price = latestRoundData ? Number(latestRoundData[1]) / Math.pow(10, decimals || 8) : 0;

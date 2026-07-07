@@ -1,8 +1,10 @@
 import { useMutation } from '@tanstack/react-query';
 import { useWriteContract, useReadContract, usePublicClient } from 'wagmi';
+import { localChain } from '@/constants/chains';
 import { Address } from 'viem';
 import { toast } from 'sonner';
 import { wagmiConfig } from '@/providers/wagmi-config';
+import { useEnsureLocalChain } from "@/hooks/useEnsureLocalChain";
 
 const ESCROW_ABI = [
   {
@@ -40,15 +42,18 @@ const ESCROW_ABI = [
  */
 export function useSetMinCollateralRatio() {
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({ escrowAddress, ratioBps }: { escrowAddress: Address; ratioBps: number }) => {
+      await ensureLocalChain();
       const txHash = await writeContractAsync({
         address: escrowAddress,
         abi: ESCROW_ABI,
         functionName: 'setMinCollateralRatio',
         args: [BigInt(ratioBps)],
+        chainId: localChain.id,
       });
 
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
@@ -69,15 +74,18 @@ export function useSetMinCollateralRatio() {
  */
 export function useSetLiquidationThreshold() {
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({ escrowAddress, thresholdBps }: { escrowAddress: Address; thresholdBps: number }) => {
+      await ensureLocalChain();
       const txHash = await writeContractAsync({
         address: escrowAddress,
         abi: ESCROW_ABI,
         functionName: 'setLiquidationThreshold',
         args: [BigInt(thresholdBps)],
+        chainId: localChain.id,
       });
 
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
@@ -103,7 +111,8 @@ export function useCollateralParams(escrowAddress: Address | undefined) {
     functionName: 'minCollateralRatio',
     query: {
       enabled: !!escrowAddress,
-    }
+    },
+    chainId: localChain.id,
   });
 
   const { data: liquidationThreshold } = useReadContract({
@@ -112,7 +121,8 @@ export function useCollateralParams(escrowAddress: Address | undefined) {
     functionName: 'liquidationThreshold',
     query: {
       enabled: !!escrowAddress,
-    }
+    },
+    chainId: localChain.id,
   });
 
   return {

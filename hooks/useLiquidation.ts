@@ -5,7 +5,9 @@ import { useWriteContract, usePublicClient } from "wagmi";
 import { type Address } from "viem";
 import { toast } from "sonner";
 import { auctionService } from "@/services/auction.service";
+import { localChain } from "@/constants/chains";
 import type { Auction } from "@/types";
+import { useEnsureLocalChain } from "@/hooks/useEnsureLocalChain";
 
 // ─── Inline ABI fragments (avoid casting the full compiled ABI) ───────────────
 
@@ -39,7 +41,7 @@ const LIQUIDATE_ABI = [
 // ─── Market liquidation status (on-chain read) ────────────────────────────────
 
 export function useLiquidationStatus(marketAddress?: string) {
-  const publicClient = usePublicClient();
+  const publicClient = usePublicClient({ chainId: localChain.id });
 
   return useQuery({
     queryKey: ["liquidation-status", marketAddress],
@@ -149,7 +151,7 @@ const IS_LIQUIDATING_ABI = [
 ] as const;
 
 export function useIsLiquidating(marketAddress?: string) {
-  const publicClient = usePublicClient();
+  const publicClient = usePublicClient({ chainId: localChain.id });
 
   return useQuery({
     queryKey: ["is-liquidating", marketAddress],
@@ -175,15 +177,18 @@ export interface TriggerLiquidationParams {
 export function useTriggerLiquidation() {
   const qc = useQueryClient();
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient();
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({ marketAddress }: TriggerLiquidationParams) => {
+      await ensureLocalChain();
       toast.info("Triggering liquidation…");
       const txHash = await writeContractAsync({
         address: marketAddress,
         abi: LIQUIDATE_ABI,
         functionName: "liquidate",
+        chainId: localChain.id,
       });
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
       if (receipt.status !== "success") throw new Error("Transaction failed");
@@ -207,10 +212,13 @@ export function useTriggerLiquidation() {
       console.error("Trigger liquidation failed:", e);
       if (e.message?.includes("User rejected")) {
         toast.error("Transaction rejected by user");
-      } else if (e.message?.includes("NotLiquidatable")) {
-        toast.error("Market is not eligible for liquidation");
       } else if (e.message?.includes("AlreadyLiquidating")) {
-        toast.error("Market is already in liquidation");
+        toast.error("Market is already in liquidation — someone else triggered it first. You can bid on the existing auction instead.");
+      } else if (e.message?.includes("InsufficientCollateral")) {
+        // Market.liquidate() reverts with this same error (reused) when
+        // !isLiquidatable() - i.e. the position recovered above the
+        // threshold (e.g. price moved back up) since it was last checked.
+        toast.error("Market is no longer eligible for liquidation");
       } else {
         toast.error(e.message || "Failed to trigger liquidation");
       }

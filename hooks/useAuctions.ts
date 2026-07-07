@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useWriteContract, usePublicClient } from "wagmi";
+import { localChain } from "@/constants/chains";
 import { erc20Abi, parseUnits, type Address } from "viem";
 import { toast } from "sonner";
 import { auctionService } from "@/services/auction.service";
@@ -10,6 +11,7 @@ import { queryKeys } from "@/constants/query-keys";
 import type { Auction } from "@/types";
 import { LIQUIDATOR_ABI } from "@/lib/contracts/abis";
 import { CONTRACT_ADDRESSES } from "@/lib/contracts/addresses";
+import { useEnsureLocalChain } from "@/hooks/useEnsureLocalChain";
 
 export function useLiquidations() {
   return useQuery({
@@ -60,7 +62,8 @@ export interface PlaceBidParams {
 export function usePlaceBid() {
   const qc = useQueryClient();
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient();
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({
@@ -69,6 +72,7 @@ export function usePlaceBid() {
       borrowAssetAddress,
       borrowAssetDecimals,
     }: PlaceBidParams) => {
+      await ensureLocalChain();
       const bidWei = parseUnits(bidAmount, borrowAssetDecimals);
       const tokenAddr = borrowAssetAddress as Address;
 
@@ -79,8 +83,10 @@ export function usePlaceBid() {
         abi: erc20Abi,
         functionName: "approve",
         args: [CONTRACT_ADDRESSES.liquidator, bidWei],
+        chainId: localChain.id,
       });
-      await publicClient!.waitForTransactionReceipt({ hash: approveTx });
+      const approveReceipt = await publicClient!.waitForTransactionReceipt({ hash: approveTx });
+      if (approveReceipt.status !== "success") throw new Error("Approval transaction failed");
 
       // Step 2 — place bid on Liquidator
       toast.info("Step 2/2: Placing bid on-chain…");
@@ -89,8 +95,15 @@ export function usePlaceBid() {
         abi: LIQUIDATOR_ABI,
         functionName: "placeBid",
         args: [BigInt(auctionId), bidWei],
+        chainId: localChain.id,
       });
-      await publicClient!.waitForTransactionReceipt({ hash: bidTx });
+      // waitForTransactionReceipt resolves even for a reverted transaction -
+      // it only rejects on network/timeout errors. Without this check, a bid
+      // that reverts on-chain (e.g. below the current Dutch price - BidTooLow)
+      // would still hit onSuccess and show "Bid placed successfully!" even
+      // though nothing was actually recorded.
+      const bidReceipt = await publicClient!.waitForTransactionReceipt({ hash: bidTx });
+      if (bidReceipt.status !== "success") throw new Error("Bid transaction reverted on-chain — it may be below the current auction price or exceed the debt amount");
       return bidTx;
     },
     onSuccess: (_, { auctionId }) => {
@@ -111,16 +124,19 @@ export function usePlaceBid() {
 export function useSettleAuction() {
   const qc = useQueryClient();
   const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient();
+  const ensureLocalChain = useEnsureLocalChain();
+  const publicClient = usePublicClient({ chainId: localChain.id });
 
   return useMutation({
     mutationFn: async ({ auctionId }: { auctionId: number }) => {
+      await ensureLocalChain();
       toast.info("Settling auction…");
       const tx = await writeContractAsync({
         address: CONTRACT_ADDRESSES.liquidator,
         abi: LIQUIDATOR_ABI,
         functionName: "settleAuction",
         args: [BigInt(auctionId)],
+        chainId: localChain.id,
       });
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: tx });
       if (receipt.status !== "success") throw new Error("Settlement transaction failed");
@@ -174,21 +190,22 @@ export function useCanSettle(auction: Auction | null, userAddress?: string) {
 
   const now = Math.floor(Date.now() / 1000);
   const auctionEnded = now >= auction.end_time;
-  const hasBids = auction.highest_bid && BigInt(auction.highest_bid) > BigInt(0);
-  const bidCoversDebt =
-    hasBids && BigInt(auction.highest_bid) >= BigInt(auction.debt_amount);
 
-  const canSettle = auction.status === "active" && (auctionEnded || !!bidCoversDebt);
+  // settleAuction() on-chain has exactly one gate: block.timestamp > endTime.
+  // There is no "early settlement if the bid covers the full debt" provision
+  // in the contract - bidding the full debt amount just means nobody can
+  // outbid you (the ceiling is reached), not that you can skip the wait.
+  // Treating it as a settle condition here let the button light up (and the
+  // tx get submitted) hours before the contract would actually allow it,
+  // guaranteeing a revert.
+  const canSettle = auction.status === "active" && auctionEnded;
 
   return {
     canSettle,
     isHighestBidder,
     auctionEnded,
-    bidCoversDebt,
     reason: !canSettle
-      ? auctionEnded
-        ? "Auction ended but no valid bids"
-        : "Auction still active. Wait for end time or bid the full debt amount."
+      ? `Auction is still active. It must reach its end time (${new Date(auction.end_time * 1000).toLocaleString()}) before it can be settled.`
       : null,
   };
 }

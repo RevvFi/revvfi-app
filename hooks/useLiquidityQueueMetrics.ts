@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { usePublicClient } from 'wagmi';
 import { type Address } from 'viem';
 import { wagmiConfig } from '@/providers/wagmi-config';
+import { localChain } from '@/constants/chains';
 import { MARKET_ABI, LIQUIDITY_QUEUE_ABI } from '@/lib/contracts/abis';
 import { readContract } from '@wagmi/core';
 
@@ -16,7 +17,7 @@ import { readContract } from '@wagmi/core';
  * Get current epoch number
  */
 export function useCurrentEpoch(marketAddress: Address | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['liquidityQueue', 'currentEpoch', marketAddress],
@@ -28,6 +29,7 @@ export function useCurrentEpoch(marketAddress: Address | undefined) {
         address: marketAddress,
         abi: MARKET_ABI,
         functionName: 'liquidityQueue',
+        chainId: localChain.id,
       })) as Address;
 
       const result = await publicClient!.readContract({
@@ -47,7 +49,7 @@ export function useCurrentEpoch(marketAddress: Address | undefined) {
  * Get epoch details by epoch number
  */
 export function useEpoch(marketAddress: Address | undefined, epochNumber: number | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['liquidityQueue', 'epoch', marketAddress, epochNumber],
@@ -59,6 +61,7 @@ export function useEpoch(marketAddress: Address | undefined, epochNumber: number
         address: marketAddress,
         abi: MARKET_ABI,
         functionName: 'liquidityQueue',
+        chainId: localChain.id,
       })) as Address;
 
       const result = await publicClient!.readContract({
@@ -79,7 +82,7 @@ export function useEpoch(marketAddress: Address | undefined, epochNumber: number
  * Get withdrawal request details by request ID
  */
 export function useWithdrawalRequest(marketAddress: Address | undefined, requestId: number | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['liquidityQueue', 'withdrawalRequest', marketAddress, requestId],
@@ -91,6 +94,7 @@ export function useWithdrawalRequest(marketAddress: Address | undefined, request
         address: marketAddress,
         abi: MARKET_ABI,
         functionName: 'liquidityQueue',
+        chainId: localChain.id,
       })) as Address;
 
       const result = await publicClient!.readContract({
@@ -111,7 +115,7 @@ export function useWithdrawalRequest(marketAddress: Address | undefined, request
  * Get all withdrawal request IDs for a lender
  */
 export function useLenderRequests(marketAddress: Address | undefined, lenderAddress: Address | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['liquidityQueue', 'lenderRequests', marketAddress, lenderAddress],
@@ -123,6 +127,7 @@ export function useLenderRequests(marketAddress: Address | undefined, lenderAddr
         address: marketAddress,
         abi: MARKET_ABI,
         functionName: 'liquidityQueue',
+        chainId: localChain.id,
       })) as Address;
 
       const result = await publicClient!.readContract({
@@ -143,7 +148,7 @@ export function useLenderRequests(marketAddress: Address | undefined, lenderAddr
  * Get all withdrawal request IDs in a specific epoch
  */
 export function useEpochRequests(marketAddress: Address | undefined, epochNumber: number | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['liquidityQueue', 'epochRequests', marketAddress, epochNumber],
@@ -155,6 +160,7 @@ export function useEpochRequests(marketAddress: Address | undefined, epochNumber
         address: marketAddress,
         abi: MARKET_ABI,
         functionName: 'liquidityQueue',
+        chainId: localChain.id,
       })) as Address;
 
       const result = await publicClient!.readContract({
@@ -175,7 +181,7 @@ export function useEpochRequests(marketAddress: Address | undefined, epochNumber
  * Check if a withdrawal request is ready to be claimed
  */
 export function useIsWithdrawalReady(marketAddress: Address | undefined, requestId: number | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['liquidityQueue', 'isWithdrawalReady', marketAddress, requestId],
@@ -187,6 +193,7 @@ export function useIsWithdrawalReady(marketAddress: Address | undefined, request
         address: marketAddress,
         abi: MARKET_ABI,
         functionName: 'liquidityQueue',
+        chainId: localChain.id,
       })) as Address;
 
       const result = await publicClient!.readContract({
@@ -207,7 +214,7 @@ export function useIsWithdrawalReady(marketAddress: Address | undefined, request
  * Get time remaining until current epoch ends (in seconds)
  */
 export function useTimeUntilEpochEnd(marketAddress: Address | undefined) {
-  const publicClient = usePublicClient({ config: wagmiConfig });
+  const publicClient = usePublicClient({ config: wagmiConfig, chainId: localChain.id });
 
   return useQuery({
     queryKey: ['liquidityQueue', 'timeUntilEpochEnd', marketAddress],
@@ -219,6 +226,7 @@ export function useTimeUntilEpochEnd(marketAddress: Address | undefined) {
         address: marketAddress,
         abi: MARKET_ABI,
         functionName: 'liquidityQueue',
+        chainId: localChain.id,
       })) as Address;
 
       const result = await publicClient!.readContract({

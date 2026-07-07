@@ -2,12 +2,19 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAccount } from "wagmi";
+import { useAccount, useReadContract } from "wagmi";
+import { erc20Abi, isAddress, type Address } from "viem";
 import { useCreateMarket } from "@/hooks/useMarkets";
+import { CONTRACT_ADDRESSES } from "@/lib/contracts/addresses";
+import { useIsRegisteredBorrower } from "@/hooks/useArchController";
+import { useMyBorrowerRequest, useRequestBorrowerAccess } from "@/hooks/useBorrowerRequests";
+import { useAuthStore } from "@/store/auth.store";
+import { useSIWE } from "@/hooks/useAuth";
+import { localChain } from "@/constants/chains";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, ArrowRight, Check, Rocket } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Rocket, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Step = 1 | 2 | 3 | 4;
@@ -20,31 +27,39 @@ const STEPS = [
 ];
 
 const ASSETS = [
-  { symbol: "USDC", name: "USD Coin", address: "0x5FbDB2315678afecb367f032d93F642f64180aa3" },
-  { symbol: "WETH", name: "Wrapped Ether", address: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512" },
+  { symbol: "USDC", name: "USD Coin", address: CONTRACT_ADDRESSES.usdc },
+  { symbol: "WETH", name: "Wrapped Ether", address: CONTRACT_ADDRESSES.weth },
 ];
 
-const ORACLES = [
-  { name: "Mock Oracle", desc: "Local testing oracle with fixed prices." },
-];
-
-const ORACLE_ADDRESSES = [
-  "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0", // Mock Oracle
-];
+// Keyed by collateral asset (not freely selectable) since each oracle is
+// calibrated for one specific collateral/borrow-asset pricing direction.
+const ORACLES_BY_COLLATERAL: Record<string, { name: string; address: string; desc: string }> = {
+  [CONTRACT_ADDRESSES.weth]: {
+    name: "Mock Oracle (WETH collateral)",
+    address: CONTRACT_ADDRESSES.collateralOracle,
+    desc: "Fixed price: 1 WETH = 2000 units of the borrow asset.",
+  },
+  [CONTRACT_ADDRESSES.usdc]: {
+    name: "Mock Oracle (USDC collateral)",
+    address: CONTRACT_ADDRESSES.collateralOracleUsdc,
+    desc: "Fixed price: 1 USDC = 0.0005 units of the borrow asset (the reciprocal of the WETH oracle above).",
+  },
+};
 
 export default function CreateMarketPage() {
   const router = useRouter();
   const { address } = useAccount();
+  const { isAuthenticated } = useAuthStore();
+  const { login, isSigningIn } = useSIWE();
   const createMarket = useCreateMarket();
+  const { data: myRequest } = useMyBorrowerRequest();
+  const requestAccessMutation = useRequestBorrowerAccess();
   const [step, setStep] = useState<Step>(1);
 
   const [form, setForm] = useState({
     borrower_address: address ?? "",
     borrow_asset: ASSETS[0].address,
-    borrow_asset_decimals: 6,
     collateral_asset: ASSETS[1].address,
-    collateral_asset_decimals: 18,
-    selectedOracle: 0,
     min_collateral_ratio: 15000,
     liquidation_threshold: 9500,
     supply_cap: "50000000",
@@ -57,18 +72,45 @@ export default function CreateMarketPage() {
 
   const borrowAsset = ASSETS.find((a) => a.address === form.borrow_asset);
   const collateralAsset = ASSETS.find((a) => a.address === form.collateral_asset);
+  // Derived, not user-selected - see ORACLES_BY_COLLATERAL above.
+  const selectedOracle = ORACLES_BY_COLLATERAL[form.collateral_asset];
+
+  // Decimals are read directly from each ERC20 contract, never hand-entered -
+  // a mismatch here would silently corrupt every amount calculation the
+  // market ever does (offers, collateral ratios, liquidations, etc).
+  const { data: borrowAssetDecimals } = useReadContract({
+    address: form.borrow_asset as `0x${string}`,
+    abi: erc20Abi,
+    functionName: "decimals",
+    chainId: localChain.id,
+  });
+  const { data: collateralAssetDecimals } = useReadContract({
+    address: form.collateral_asset as `0x${string}`,
+    abi: erc20Abi,
+    functionName: "decimals",
+    chainId: localChain.id,
+  });
+
+  // deployMarket() requires the borrower to already be registered via
+  // ArchController - check early so this doesn't only surface as a revert.
+  const borrowerAddressValid = isAddress(form.borrower_address);
+  const { data: isRegisteredBorrower, isLoading: registrationLoading } = useIsRegisteredBorrower(
+    borrowerAddressValid ? (form.borrower_address as Address) : undefined
+  );
+  const borrowerBlocked = borrowerAddressValid && isRegisteredBorrower === false;
+  const isOwnAddress = !!address && form.borrower_address.toLowerCase() === address.toLowerCase();
 
   async function handleDeploy() {
-    if (!form.borrower_address) {
+    if (!form.borrower_address || borrowAssetDecimals === undefined || collateralAssetDecimals === undefined || !selectedOracle) {
       return;
     }
     await createMarket.mutateAsync({
       borrower_address: form.borrower_address,
       borrow_asset: form.borrow_asset,
-      borrow_asset_decimals: form.borrow_asset_decimals,
+      borrow_asset_decimals: borrowAssetDecimals,
       collateral_asset: form.collateral_asset,
-      collateral_asset_decimals: form.collateral_asset_decimals,
-      collateral_oracle: ORACLE_ADDRESSES[form.selectedOracle],
+      collateral_asset_decimals: collateralAssetDecimals,
+      collateral_oracle: selectedOracle.address,
       min_collateral_ratio: form.min_collateral_ratio,
       liquidation_threshold: form.liquidation_threshold,
     });
@@ -127,6 +169,45 @@ export default function CreateMarketPage() {
                 hint="The wallet address that will borrow from this market"
               />
 
+              {borrowerBlocked && (
+                <div className="flex items-center justify-between gap-3 rounded-lg bg-amber-400/10 border border-amber-400/30 p-3">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-on-surface">Not a registered borrower</p>
+                      <p className="text-xs text-on-surface-variant mt-0.5">
+                        {isOwnAddress
+                          ? !isAuthenticated
+                            ? "Sign in with your wallet to request borrower access."
+                            : myRequest?.status === "pending"
+                              ? "Your borrower access request is pending admin review."
+                              : "This address must be approved by the protocol admin before a market can be created for it. Request access below."
+                          : "This address must be approved by the protocol admin before a market can be created for it - only that wallet's owner can request access."}
+                      </p>
+                    </div>
+                  </div>
+                  {isOwnAddress && (
+                    !isAuthenticated ? (
+                      <Button size="sm" onClick={() => login()} loading={isSigningIn} className="shrink-0">
+                        Sign In
+                      </Button>
+                    ) : myRequest?.status !== "pending" ? (
+                      <Button
+                        size="sm"
+                        onClick={() => requestAccessMutation.mutate()}
+                        loading={requestAccessMutation.isPending}
+                        className="shrink-0"
+                      >
+                        {myRequest?.status === "rejected" ? "Request Again" : "Request Access"}
+                      </Button>
+                    ) : null
+                  )}
+                </div>
+              )}
+              {borrowerAddressValid && registrationLoading && (
+                <p className="text-xs text-on-surface-variant">Checking borrower registration…</p>
+              )}
+
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant block mb-3">Base Asset (Borrowed)</label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -155,12 +236,6 @@ export default function CreateMarketPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <Input label="Borrow Asset Decimals" type="number" value={form.borrow_asset_decimals.toString()}
-                  onChange={(e) => setField("borrow_asset_decimals", parseInt(e.target.value))} />
-                <Input label="Collateral Asset Decimals" type="number" value={form.collateral_asset_decimals.toString()}
-                  onChange={(e) => setField("collateral_asset_decimals", parseInt(e.target.value))} />
-              </div>
             </Card>
           )}
 
@@ -177,11 +252,16 @@ export default function CreateMarketPage() {
                   <label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Min Collateral Ratio (BPS)</label>
                   <span className="text-sm font-bold text-primary">{(form.min_collateral_ratio / 100).toFixed(1)}%</span>
                 </div>
-                <input type="range" min={5000} max={9500} step={100} value={form.min_collateral_ratio}
+                {/* Contract-enforced bounds: RevvFiFactory._validateRatios requires
+                    >= MIN_CR (11000 = 110%), and RevvFiCollateralEscrow.setMinCollateralRatio
+                    - called right after, in the same deployMarket() flow - independently
+                    caps it at BP*2 (20000 = 200%), which binds tighter than the factory's
+                    own 500% ceiling (verified on-chain: 20000 succeeds, 20100 reverts). */}
+                <input type="range" min={11000} max={20000} step={100} value={form.min_collateral_ratio}
                   onChange={(e) => setField("min_collateral_ratio", parseInt(e.target.value))}
                   className="w-full accent-primary-container" />
                 <div className="flex justify-between text-xs text-on-surface-variant mt-1">
-                  <span>Conservative (50%)</span><span>Aggressive (95%)</span>
+                  <span>Aggressive (110%)</span><span>Conservative (200%)</span>
                 </div>
               </div>
 
@@ -190,30 +270,35 @@ export default function CreateMarketPage() {
                   <label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Liquidation Threshold (BPS)</label>
                   <span className="text-sm font-bold text-amber-400">{(form.liquidation_threshold / 100).toFixed(1)}%</span>
                 </div>
-                <input type="range" min={form.min_collateral_ratio} max={9900} step={100} value={form.liquidation_threshold}
+                {/* Contract requires liquidationThreshold to be well BELOW
+                    minCollateralRatio (at least a 500bps buffer), not above it -
+                    and always under 10000 (100%). Since minCollateralRatio's own
+                    floor (11000) already exceeds 10000 - 500, the 100-9900 range
+                    is always valid regardless of the min collateral ratio chosen. */}
+                <input type="range" min={100} max={9900} step={100} value={form.liquidation_threshold}
                   onChange={(e) => setField("liquidation_threshold", parseInt(e.target.value))}
                   className="w-full accent-amber-400" />
                 <div className="flex justify-between text-xs text-on-surface-variant mt-1">
-                  <span>Safe Margin</span><span>High Risk</span>
+                  <span>Liquidate Early (1%)</span><span>Liquidate Late (99%)</span>
                 </div>
               </div>
 
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant block mb-3">Oracle</label>
-                <div className="grid grid-cols-2 gap-3">
-                  {ORACLES.map((o, i) => (
-                    <button key={o.name} onClick={() => setField("selectedOracle", i)}
-                      className={cn("rounded-lg border p-4 text-left transition-all", form.selectedOracle === i ? "border-primary-container/60 bg-primary-container/10" : "border-outline-variant/20 hover:border-outline-variant/40")}>
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className={cn("h-4 w-4 rounded-full border-2 flex items-center justify-center", form.selectedOracle === i ? "border-primary-container" : "border-outline-variant")}>
-                          {form.selectedOracle === i && <div className="h-2 w-2 rounded-full bg-primary-container" />}
-                        </div>
-                        <p className="text-sm font-semibold text-on-surface">{o.name}</p>
-                      </div>
-                      <p className="text-xs text-on-surface-variant">{o.desc}</p>
-                    </button>
-                  ))}
-                </div>
+                {/* Auto-derived from the collateral asset, not a free choice -
+                    a market with the wrong oracle for its pairing direction
+                    produces silently-wrong collateral values (see
+                    ORACLES_BY_COLLATERAL above for why). */}
+                {selectedOracle ? (
+                  <div className="rounded-lg border border-primary-container/60 bg-primary-container/10 p-4">
+                    <p className="text-sm font-semibold text-on-surface">{selectedOracle.name}</p>
+                    <p className="text-xs text-on-surface-variant mt-1">{selectedOracle.desc}</p>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-4">
+                    <p className="text-sm font-semibold text-amber-400">No oracle configured for this collateral asset</p>
+                  </div>
+                )}
               </div>
             </Card>
           )}
@@ -225,12 +310,12 @@ export default function CreateMarketPage() {
               <div className="space-y-2">
                 {[
                   ["Borrower", form.borrower_address],
-                  ["Borrow Asset", `${borrowAsset?.symbol ?? "—"} (${form.borrow_asset_decimals} dec)`],
-                  ["Collateral Asset", `${collateralAsset?.symbol ?? "—"} (${form.collateral_asset_decimals} dec)`],
+                  ["Borrow Asset", borrowAsset?.symbol ?? "—"],
+                  ["Collateral Asset", collateralAsset?.symbol ?? "—"],
                   ["Min Collateral Ratio", `${(form.min_collateral_ratio / 100).toFixed(1)}% (${form.min_collateral_ratio} BPS)`],
                   ["Liquidation Threshold", `${(form.liquidation_threshold / 100).toFixed(1)}% (${form.liquidation_threshold} BPS)`],
-                  ["Oracle", ORACLES[form.selectedOracle].name],
-                  ["Oracle Address", ORACLE_ADDRESSES[form.selectedOracle]],
+                  ["Oracle", selectedOracle?.name ?? "—"],
+                  ["Oracle Address", selectedOracle?.address ?? "—"],
                 ].map(([k, v]) => (
                   <div key={k} className="flex justify-between py-2 border-b border-outline-variant/10 text-sm">
                     <span className="text-on-surface-variant shrink-0 mr-4">{k}</span>
@@ -262,7 +347,7 @@ export default function CreateMarketPage() {
                 size="xl"
                 onClick={handleDeploy}
                 loading={createMarket.isPending}
-                disabled={!form.borrower_address}
+                disabled={!form.borrower_address || borrowAssetDecimals === undefined || collateralAssetDecimals === undefined || borrowerBlocked || !selectedOracle}
                 className="gap-2"
               >
                 <Rocket className="h-5 w-5" /> Deploy Market On-Chain
@@ -276,7 +361,11 @@ export default function CreateMarketPage() {
               <ArrowLeft className="h-4 w-4" /> Previous
             </Button>
             {step < 4 && (
-              <Button onClick={() => setStep((s) => (s + 1) as Step)} className="gap-2">
+              <Button
+                onClick={() => setStep((s) => (s + 1) as Step)}
+                disabled={step === 1 && (!borrowerAddressValid || borrowerBlocked)}
+                className="gap-2"
+              >
                 {step === 3 ? "Confirm & Deploy" : "Next"} <ArrowRight className="h-4 w-4" />
               </Button>
             )}
@@ -299,7 +388,7 @@ export default function CreateMarketPage() {
             {[
               ["Min LTV", `${(form.min_collateral_ratio / 100).toFixed(1)}%`],
               ["Liq. Threshold", `${(form.liquidation_threshold / 100).toFixed(1)}%`],
-              ["Oracle", ORACLES[form.selectedOracle].name.split(" ")[0]],
+              ["Oracle", selectedOracle ? selectedOracle.name.split(" ")[0] : "—"],
             ].map(([k, v]) => (
               <div key={k} className="flex justify-between">
                 <span className="text-on-surface-variant">{k}</span>

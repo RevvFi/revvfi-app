@@ -6,15 +6,20 @@ export const CONTRACT_ADDRESSES = {
   liquidator: (process.env.NEXT_PUBLIC_LIQUIDATOR_ADDRESS ?? "") as `0x${string}`,
   reputationRegistry: (process.env.NEXT_PUBLIC_REPUTATION_REGISTRY_ADDRESS ?? "") as `0x${string}`,
 
-  // Token Addresses (from backend .env - add to frontend .env.local)
-  usdc: "0x5FbDB2315678afecb367f032d93F642f64180aa3" as `0x${string}`,
-  weth: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512" as `0x${string}`,
+  // Token Addresses
+  usdc: (process.env.NEXT_PUBLIC_USDC_ADDRESS ?? "") as `0x${string}`,
+  weth: (process.env.NEXT_PUBLIC_WETH_ADDRESS ?? "") as `0x${string}`,
 
-  // Oracle Address
-  collateralOracle: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0" as `0x${string}`,
+  // Oracle Addresses - two mock oracles, each calibrated for a different
+  // collateral-pricing direction (a single oracle can't correctly represent
+  // both "1 WETH = X borrow-asset units" and its reciprocal at once - see
+  // RevvFiDeployLocalnet.s.sol). Read from env, not hardcoded, so these stay
+  // correct across every `make up`/redeploy instead of silently going stale.
+  collateralOracle: (process.env.NEXT_PUBLIC_COLLATERAL_ORACLE_ADDRESS ?? "") as `0x${string}`,
+  collateralOracleUsdc: (process.env.NEXT_PUBLIC_COLLATERAL_ORACLE_ADDRESS_USDC ?? "") as `0x${string}`,
 
   // Default Market (can be fetched dynamically from factory)
-  defaultMarket: "0x9bd03768a7DCc129555dE410FF8E85528A4F88b5" as `0x${string}`,
+  defaultMarket: (process.env.NEXT_PUBLIC_DEFAULT_MARKET_ADDRESS ?? "") as `0x${string}`,
 
   // Market-specific addresses (fetched per market from factory.getMarket())
   // These will be populated dynamically in hooks

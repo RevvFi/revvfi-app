@@ -1,5 +1,5 @@
-import { get, post } from "@/lib/api";
-import type { Borrower, BorrowerRisk } from "@/types";
+import { get, patch, post } from "@/lib/api";
+import type { Borrower, BorrowerRequest, BorrowerRequestListResponse, BorrowerRisk } from "@/types";
 
 export interface CollateralBalance {
   Borrower: string;
@@ -32,5 +32,24 @@ export const borrowerService = {
 
   async getCollateralBalance(address: string): Promise<CollateralBalance | null> {
     return get<CollateralBalance>(`/borrowers/${address}/collateral`);
+  },
+
+  // ── Borrower access requests ──────────────────────────────────────────
+  // registerBorrower() on-chain is onlyOwner (admin), so a signed-in wallet
+  // can only ever ask for access via this off-chain review queue.
+  async requestAccess(): Promise<BorrowerRequest> {
+    return post<BorrowerRequest>("/borrower-requests", {});
+  },
+
+  async getMyRequest(): Promise<BorrowerRequest | null> {
+    return get<BorrowerRequest | null>("/borrower-requests/me");
+  },
+
+  async listRequests(status?: string): Promise<BorrowerRequestListResponse> {
+    return get<BorrowerRequestListResponse>("/admin/borrower-requests", { params: status ? { status } : undefined });
+  },
+
+  async rejectRequest(id: number, note?: string): Promise<{ message: string }> {
+    return patch<{ message: string }>(`/admin/borrower-requests/${id}/reject`, { note });
   },
 };

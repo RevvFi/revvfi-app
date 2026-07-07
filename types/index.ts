@@ -146,6 +146,21 @@ export interface BorrowerRisk {
   success_rate: number;
 }
 
+export interface BorrowerRequest {
+  id: number;
+  wallet_address: string;
+  status: "pending" | "approved" | "rejected";
+  note?: string;
+  requested_at: number;
+  decided_at?: number;
+  decided_by?: string;
+}
+
+export interface BorrowerRequestListResponse {
+  count: number;
+  requests: BorrowerRequest[];
+}
+
 // ─── Position ─────────────────────────────────────────────────────────────────
 
 export interface Position {

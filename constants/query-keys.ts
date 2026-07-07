@@ -15,6 +15,7 @@ export const queryKeys = {
   borrowers: {
     detail: (address: string) => ["borrowers", "detail", address] as const,
     risk: (address: string) => ["borrowers", "risk", address] as const,
+    myRequest: (wallet?: string) => ["borrowers", "myRequest", wallet] as const,
   },
   positions: {
     all: (params?: unknown) => ["positions", "list", params] as const,
@@ -38,6 +39,7 @@ export const queryKeys = {
     borrowers: (params?: unknown) => ["admin", "borrowers", params] as const,
     borrowerDetail: (address: string) => ["admin", "borrowers", "detail", address] as const,
     pendingBorrowers: ["admin", "borrowers", "pending"] as const,
+    borrowerRequests: (status?: string) => ["admin", "borrowerRequests", status] as const,
     reputation: (address: string) => ["admin", "reputation", address] as const,
     defaultedBorrowers: ["admin", "reputation", "defaulted"] as const,
     health: ["admin", "health"] as const,

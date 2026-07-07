@@ -50,15 +50,23 @@ apiClient.interceptors.response.use(
   },
   (err: AxiosError<ApiError>) => {
     const correlationId = (err.config as any)?.correlationId;
-
-    // Log error
-    logger.error("API request failed", err, {
+    const logData = {
       correlation_id: correlationId,
       status_code: err.response?.status,
       method: err.config?.method,
       url: err.config?.url,
       error_message: err.response?.data?.error?.message || err.message,
-    });
+    };
+
+    // A 404 on a "get a single resource" request (e.g. "is this address a
+    // borrower?") is frequently a normal, expected outcome - not a genuine
+    // failure - so it's logged at debug level rather than error. Every
+    // other status (5xx, network errors, etc.) still logs as an error.
+    if (err.response?.status === 404) {
+      logger.debug("API request returned 404 (resource not found)", logData);
+    } else {
+      logger.error("API request failed", err, logData);
+    }
 
     if (err.response?.status === 401 && typeof window !== "undefined") {
       // Clear stored token so user is prompted to re-authenticate

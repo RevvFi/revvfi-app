@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAccount } from "wagmi";
 import { WalletPrompt } from "@/components/wallet-gate";
@@ -12,10 +12,9 @@ import {
   useDepositCollateral,
   useWithdrawCollateral,
 } from "@/hooks/useBorrower";
-import { useRegisterBorrower } from "@/hooks/useArchController";
+import { useArchControllerOwner } from "@/hooks/useArchController";
 import { useRepayFull, useCloseMarket } from "@/hooks/useMarketActions";
-import { useMarketHealth } from "@/hooks/useMarketMetrics";
-import { usePositions } from "@/hooks/usePositions";
+import { useMarketHealth, useMaxBorrowable } from "@/hooks/useMarketMetrics";
 import { useMarkets } from "@/hooks/useMarkets";
 import { useMarketOffers } from "@/hooks/useOffers";
 import { useBestOffers, useTotalLiquidityAvailable, useActiveOfferCount } from "@/hooks/useOfferBookMetrics";
@@ -25,13 +24,16 @@ import { Input } from "@/components/ui/input";
 import { StatusBadge, RiskBadge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, EmptyState } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatAddress, formatAPR, formatTimestamp, fmtUSD } from "@/lib/utils";
+import { formatAddress, formatAPR, formatTimestamp, fmtUSD, formatTokenAmount } from "@/lib/utils";
 import { HealthFactorRing } from "@/components/HealthFactorRing";
 import { AlertTriangle, RefreshCw, ShieldCheck, Lock, TrendingUp, CheckCircle2, XCircle, DollarSign, Users } from "lucide-react";
 import { toast } from "sonner";
 import { MarketSelector } from "@/components/MarketSelector";
-import { useMarketCollateralBalance, useMinCollateralRatio, useMarketTotalDebt, calculateMaxBorrow } from "@/hooks/useMarketCollateral";
-import { formatUnits } from "viem";
+import { useMarketCollateralBalance, useMinCollateralRatio, useMarketTotalDebt, useMarketCurrentPrincipal, useCollateralOracleConverter } from "@/hooks/useMarketCollateral";
+import { formatUnits, parseUnits } from "viem";
+import { useMyBorrowerRequest, useRequestBorrowerAccess } from "@/hooks/useBorrowerRequests";
+import { useAuthStore } from "@/store/auth.store";
+import { useSIWE } from "@/hooks/useAuth";
 
 function BorrowContent() {
   const { address } = useAccount();
@@ -39,8 +41,11 @@ function BorrowContent() {
   const { data: borrower, isLoading: borrowerLoading } = useBorrower(address ?? "");
   const { data: risk } = useBorrowerRisk(address ?? "");
   const { data: markets } = useMarkets({ is_active: true });
-  const { data: positions } = usePositions();
-  const registerMutation = useRegisterBorrower();
+  const { data: archControllerOwner } = useArchControllerOwner();
+  const { isAuthenticated } = useAuthStore();
+  const { login, isSigningIn } = useSIWE();
+  const { data: myRequest } = useMyBorrowerRequest();
+  const requestAccessMutation = useRequestBorrowerAccess();
   const borrowMutation = useBorrow();
   const repayMutation = useRepay();
   const repayFullMutation = useRepayFull();
@@ -50,25 +55,23 @@ function BorrowContent() {
 
   const [selectedMarket, setSelectedMarket] = useState("");
 
-  // Pre-select market when navigating from market detail page (?market=0x...)
   useEffect(() => {
     const marketParam = searchParams.get("market");
     if (marketParam) setSelectedMarket(marketParam);
   }, [searchParams]);
   const [useSeniorOnly, setUseSeniorOnly] = useState(false);
 
-  // NEW: Real-time market health metrics from blockchain
   const marketHealth = useMarketHealth(selectedMarket as `0x${string}`);
 
-  // NEW: Fetch market-specific collateral balance
   const { data: marketCollateral } = useMarketCollateralBalance(
     selectedMarket as `0x${string}`,
     address as `0x${string}`
   );
 
-  // NEW: Fetch min collateral ratio and total debt
   const { data: minCollateralRatio } = useMinCollateralRatio(selectedMarket as `0x${string}`);
   const { data: totalDebt } = useMarketTotalDebt(selectedMarket as `0x${string}`);
+  const { data: currentPrincipal } = useMarketCurrentPrincipal(selectedMarket as `0x${string}`);
+  const { toBorrowUnits: collateralToBorrowUnits, ready: oracleReady } = useCollateralOracleConverter(selectedMarket as `0x${string}`);
 
   const [borrowAmount, setBorrowAmount] = useState("");
   const [maxAPR, setMaxAPR] = useState("1000");
@@ -78,101 +81,91 @@ function BorrowContent() {
   const [simCollateral, setSimCollateral] = useState(0);
   const [simBorrow, setSimBorrow] = useState(0);
 
-  // Prefer on-chain ratio when a market is selected (avoids stale/wrong backend value).
-  // collateralRatio and minCollateralRatio are both in bps (e.g. 20600, 11000).
-  // healthFactor = collateralRatio / minCollateralRatio  →  20600 / 11000 = 1.87
+  // Zero debt: getCollateralRatio() returns a sentinel near type(uint256).max, so
+  // treat "no debt" as its own healthy state rather than dividing it out.
+  const hasNoDebt = marketHealth.totalOwed !== undefined && marketHealth.totalOwed === BigInt(0);
+
   const onChainHealthFactor =
-    marketHealth.collateralRatio && minCollateralRatio && Number(minCollateralRatio) > 0
+    !hasNoDebt && marketHealth.collateralRatio && minCollateralRatio && Number(minCollateralRatio) > 0
       ? Number(marketHealth.collateralRatio) / Number(minCollateralRatio)
       : null;
-  const healthFactor = onChainHealthFactor ?? (risk?.health_factor ?? 0);
-  const hfColor = healthFactor > 1.5 ? "text-emerald-400" : healthFactor > 1.2 ? "text-amber-400" : "text-red-400";
+  const healthFactorUnknown = !hasNoDebt && onChainHealthFactor === null && marketHealth.isError;
+  const healthFactor = onChainHealthFactor ?? (healthFactorUnknown ? 0 : (risk?.health_factor ?? 0));
+  const hfColor = healthFactorUnknown ? "text-on-surface-variant" : hasNoDebt ? "text-emerald-400" : healthFactor > 1.5 ? "text-emerald-400" : healthFactor > 1.2 ? "text-amber-400" : "text-red-400";
 
   const selectedMarketData = markets?.markets.find((m) => m.address === selectedMarket);
 
-  // Check if connected user is the borrower of the selected market
   const isMarketBorrower = address && selectedMarketData &&
     address.toLowerCase() === selectedMarketData.borrower.toLowerCase();
 
-  // NEW: Fetch all offers for the selected market (from database)
   const { data: marketOffers, isLoading: offersLoading } = useMarketOffers(selectedMarket);
 
-  // NEW: Get real-time liquidity stats from blockchain
   const { data: totalLiquidity } = useTotalLiquidityAvailable(selectedMarket as `0x${string}`);
   const { data: offerCount } = useActiveOfferCount(selectedMarket as `0x${string}`);
 
-  // NEW: Get borrow preview (updates as user types amount)
-  const { data: borrowPreview, isLoading: previewLoading } = useBestOffers(
+  const { data: borrowPreview } = useBestOffers(
     selectedMarket as `0x${string}`,
     borrowAmount,
     selectedMarketData?.borrow_asset.decimals || 6,
     useSeniorOnly
   );
 
-  // NEW: Calculate max borrow amount
-  const collateralPriceUSD = BigInt(2000 * 1e8); // TODO: Fetch from oracle ($2000 WETH with 8 decimals)
-  const maxBorrowWei = marketCollateral && minCollateralRatio
-    ? calculateMaxBorrow(
-        marketCollateral,
-        collateralPriceUSD,
-        minCollateralRatio,
-        totalDebt || BigInt(0),
-        totalLiquidity ?? undefined  // cap by available offer-book liquidity
-      )
-    : BigInt(0);
+  const { data: maxBorrowWeiRaw } = useMaxBorrowable(selectedMarket as `0x${string}`);
+  const maxBorrowWei = maxBorrowWeiRaw ?? BigInt(0);
 
   const maxBorrowFormatted = formatUnits(maxBorrowWei, selectedMarketData?.borrow_asset.decimals || 6);
   const collateralFormatted = marketCollateral
     ? formatUnits(marketCollateral, selectedMarketData?.collateral_asset.decimals || 18)
     : "0";
 
-  // Calculate senior and junior liquidity breakdown
-  const seniorLiquidity = marketOffers?.offers?.filter(o => o.seniority === 0)
-    .reduce((sum, o) => sum + parseFloat(o.remaining_amount || o.amount), 0) || 0;
-  const juniorLiquidity = marketOffers?.offers?.filter(o => o.seniority === 1)
-    .reduce((sum, o) => sum + parseFloat(o.remaining_amount || o.amount), 0) || 0;
-  const seniorOfferCount = marketOffers?.offers?.filter(o => o.seniority === 0).length || 0;
-  const juniorOfferCount = marketOffers?.offers?.filter(o => o.seniority === 1).length || 0;
+  const { seniorLiquidity, juniorLiquidity, seniorOfferCount, juniorOfferCount, bestAPR } = useMemo(() => {
+    const offers = marketOffers?.offers ?? [];
+    const decimals = selectedMarketData?.borrow_asset.decimals ?? 6;
+    const senior = offers.filter(o => o.seniority === 0);
+    const junior = offers.filter(o => o.seniority === 1);
+    const sumAmounts = (list: typeof offers) =>
+      list.reduce((sum, o) => sum + Number(formatUnits(BigInt(o.remaining_amount || o.amount || "0"), decimals)), 0);
+    return {
+      seniorLiquidity: sumAmounts(senior),
+      juniorLiquidity: sumAmounts(junior),
+      seniorOfferCount: senior.length,
+      juniorOfferCount: junior.length,
+      bestAPR: offers.length > 0 ? Math.min(...offers.map(o => o.apr)) : 0,
+    };
+  }, [marketOffers, selectedMarketData?.borrow_asset.decimals]);
 
-  // Find best available APR
-  const bestAPR = (marketOffers?.offers && marketOffers.offers.length > 0)
-    ? Math.min(...marketOffers.offers.map(o => o.apr))
-    : 0;
-
-  // Sync simulation inputs from collateral/borrow inputs
   useEffect(() => {
     setSimCollateral(parseFloat(depositAmount || "0") || 0);
     setSimBorrow(parseFloat(borrowAmount || "0") || 0);
   }, [depositAmount, borrowAmount]);
 
-  // Live simulation values
-  const WETH_PRICE = 2500; // fallback — real price from oracle would be better
-  const simCollateralValueUSD = simCollateral * WETH_PRICE;
-  const simMaxBorrow = simCollateralValueUSD / 1.5; // 150% min ratio
-  const simHealthFactor = simBorrow > 0 ? simCollateralValueUSD / (simBorrow * 1.5) : 0;
-  const simLiquidationPrice = simCollateral > 0 && simBorrow > 0 ? (simBorrow * 1.5) / simCollateral : 0;
+  const collateralDecimalsForSim = selectedMarketData?.collateral_asset.decimals ?? 18;
+  const borrowDecimalsForSim = selectedMarketData?.borrow_asset.decimals ?? 6;
+  const simCollateralValueInBorrowUnits =
+    oracleReady && collateralToBorrowUnits && simCollateral > 0
+      ? Number(formatUnits(collateralToBorrowUnits(parseUnits(simCollateral.toString(), collateralDecimalsForSim)), borrowDecimalsForSim))
+      : 0;
+  const simMinRatio = minCollateralRatio ? Number(minCollateralRatio) / 10000 : 1.1;
+  const simMaxBorrow = simMinRatio > 0 ? simCollateralValueInBorrowUnits / simMinRatio : 0;
+  const simHealthFactor = simBorrow > 0 ? simCollateralValueInBorrowUnits / (simBorrow * simMinRatio) : 0;
+  const simLiquidationPrice = simCollateral > 0 && simBorrow > 0 ? (simBorrow * simMinRatio) / simCollateral : 0;
   const simBorrowPower = simMaxBorrow > 0 ? Math.min((simBorrow / simMaxBorrow) * 100, 100) : 0;
   const simHealthColor = simHealthFactor >= 1.5 ? "text-emerald-400" : simHealthFactor >= 1.2 ? "text-amber-400" : "text-red-400";
 
-  // Calculate accrued interest (simple interest calculation)
-  const calculateAccruedInterest = () => {
-    if (!borrower?.total_borrowed || !selectedMarketData || !borrower.last_activity) return 0;
+  // Total Owed and Principal both come from this market's own on-chain state
+  // (totalDebt/getCurrentPrincipal), so Interest is just their difference.
+  const repayDecimals = selectedMarketData?.borrow_asset.decimals ?? 6;
+  const totalDebtDecimal = totalDebt !== undefined ? parseFloat(formatUnits(totalDebt, repayDecimals)) : 0;
+  const principalDecimal = currentPrincipal !== undefined ? parseFloat(formatUnits(currentPrincipal, repayDecimals)) : 0;
+  const accruedInterestDecimal = Math.max(0, totalDebtDecimal - principalDecimal);
 
-    const principal = parseFloat(borrower.total_borrowed);
-    const apr = selectedMarketData.weighted_apr; // in basis points (e.g., 1000 = 10%)
-    const currentTime = Math.floor(Date.now() / 1000);
-    const timeElapsed = currentTime - borrower.last_activity; // seconds
-
-    // Simple interest: (Principal × APR × Time) / Seconds in Year
-    const aprDecimal = apr / 10000; // Convert bps to decimal
-    const secondsPerYear = 365 * 24 * 60 * 60;
-    const interest = (principal * aprDecimal * timeElapsed) / secondsPerYear;
-
-    return Math.floor(interest);
-  };
-
-  const accruedInterest = calculateAccruedInterest();
-  const totalDebtWithInterest = (parseFloat(borrower?.total_borrowed ?? "0") - parseFloat(borrower?.total_repaid ?? "0")) + accruedInterest;
+  const maxAPRBigInt = BigInt(Number.isFinite(parseInt(maxAPR)) ? parseInt(maxAPR) : 0);
+  let requiredBorrowWei = BigInt(0);
+  try {
+    requiredBorrowWei = borrowAmount ? parseUnits(borrowAmount, borrowDecimalsForSim) : BigInt(0);
+  } catch {
+    requiredBorrowWei = BigInt(0);
+  }
 
   async function handleBorrow() {
     if (!selectedMarket || !borrowAmount) {
@@ -308,17 +301,44 @@ function BorrowContent() {
         <Card className="p-5 border-amber-400/20 bg-amber-400/5">
           <div className="flex items-center gap-3">
             <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0" />
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-on-surface">Not registered as borrower</p>
-              <p className="text-xs text-on-surface-variant mt-0.5">Register to access borrowing features</p>
+              {!isAuthenticated ? (
+                <p className="text-xs text-on-surface-variant mt-0.5">
+                  Sign in with your wallet to request borrower access.
+                </p>
+              ) : myRequest?.status === "pending" ? (
+                <p className="text-xs text-on-surface-variant mt-0.5">
+                  Your borrower access request is pending admin review.
+                </p>
+              ) : myRequest?.status === "rejected" ? (
+                <p className="text-xs text-on-surface-variant mt-0.5">
+                  Your borrower access request was declined
+                  {myRequest.note ? ` (${myRequest.note})` : ""}. You can request again below.
+                </p>
+              ) : (
+                <p className="text-xs text-on-surface-variant mt-0.5">
+                  Request access below — the protocol admin
+                  {archControllerOwner ? ` (${formatAddress(archControllerOwner as string)})` : ""} reviews and
+                  approves new borrowers on-chain.
+                </p>
+              )}
             </div>
-            <Button
-              size="sm"
-              onClick={() => address && registerMutation.mutate({ borrower: address as `0x${string}` })}
-              loading={registerMutation.isPending}
-            >
-              Register Now
-            </Button>
+            {!isAuthenticated ? (
+              <Button size="sm" onClick={() => login()} loading={isSigningIn}>
+                Sign In
+              </Button>
+            ) : myRequest?.status === "pending" ? (
+              <StatusBadge status="pending" />
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => requestAccessMutation.mutate()}
+                loading={requestAccessMutation.isPending}
+              >
+                {myRequest?.status === "rejected" ? "Request Again" : "Request Borrower Access"}
+              </Button>
+            )}
           </div>
         </Card>
       )}
@@ -330,17 +350,23 @@ function BorrowContent() {
         ) : (
           <>
             <Card className="p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">Total Borrowed</p>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">Total Borrowed (Lifetime)</p>
               <p className="text-xl font-semibold text-on-surface mono">{fmtUSD(borrower?.total_borrowed)}</p>
             </Card>
             <Card className="p-4">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">Outstanding Debt</p>
               <p className="text-xl font-semibold text-on-surface mono">
-                {fmtUSD(
-                  String(
-                    Math.max(0, parseFloat(borrower?.total_borrowed ?? "0") - parseFloat(borrower?.total_repaid ?? "0"))
-                  )
-                )}
+                {/* Prefer the live on-chain balance for the selected market - the
+                    backend's total_borrowed/total_repaid only update on a full
+                    repay cycle, so during partial repayment they'd stay frozen
+                    at the original amount even as the real debt goes down. */}
+                {totalDebt !== undefined && selectedMarketData
+                  ? fmtUSD(totalDebt.toString(), selectedMarketData.borrow_asset.decimals)
+                  : fmtUSD(
+                      String(
+                        Math.max(0, parseFloat(borrower?.total_borrowed ?? "0") - parseFloat(borrower?.total_repaid ?? "0"))
+                      )
+                    )}
               </p>
             </Card>
             <Card className="p-4">
@@ -350,7 +376,7 @@ function BorrowContent() {
             {/* Health Factor — ring replaces flat progress bar */}
             <Card className="p-4 flex flex-col items-center justify-center gap-1">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant self-stretch">Health Factor</p>
-              <HealthFactorRing value={healthFactor} size="sm" />
+              <HealthFactorRing value={healthFactor} error={healthFactorUnknown} size="sm" />
             </Card>
             <Card className="p-4">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">Reputation</p>
@@ -416,7 +442,7 @@ function BorrowContent() {
                     <div className="p-3 rounded bg-primary/5 border border-primary/20">
                       <p className="text-xs text-on-surface-variant mb-1">Senior Liquidity</p>
                       <p className="text-2xl font-bold text-primary">
-                        {(seniorLiquidity / 1e6).toFixed(2)}
+                        {seniorLiquidity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </p>
                       <p className="text-xs text-on-surface-variant mt-1">
                         {selectedMarketData?.borrow_asset.symbol} · {seniorOfferCount} offers
@@ -425,7 +451,7 @@ function BorrowContent() {
                     <div className="p-3 rounded bg-surface-container border border-outline-variant/20">
                       <p className="text-xs text-on-surface-variant mb-1">Junior Liquidity</p>
                       <p className="text-2xl font-bold text-on-surface">
-                        {(juniorLiquidity / 1e6).toFixed(2)}
+                        {juniorLiquidity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </p>
                       <p className="text-xs text-on-surface-variant mt-1">
                         {selectedMarketData?.borrow_asset.symbol} · {juniorOfferCount} offers
@@ -453,95 +479,6 @@ function BorrowContent() {
                       </span>
                     </div>
                   </div>
-                </div>
-              )}
-            </Card>
-
-            {/* Borrow Preview */}
-            <Card className="p-5 border-primary/30 bg-primary/5">
-              <div className="flex items-center gap-2 mb-4">
-                <TrendingUp className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-primary">
-                  Borrow Preview
-                </h3>
-              </div>
-
-              {!borrowAmount || parseFloat(borrowAmount) <= 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-sm text-on-surface-variant">
-                    Enter a borrow amount below to see which offers will be matched
-                  </p>
-                </div>
-              ) : previewLoading ? (
-                <Skeleton className="h-32" />
-              ) : borrowPreview ? (
-                <div className="space-y-3">
-                  <p className="text-xs text-on-surface-variant">
-                    For amount: <span className="font-semibold text-primary">{borrowAmount} {selectedMarketData?.borrow_asset.symbol}</span>
-                  </p>
-
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-sm text-on-surface-variant">Offers to match:</span>
-                      <span className="font-semibold text-on-surface">{borrowPreview.offers.length}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-on-surface-variant">Total available:</span>
-                      <span className="font-semibold text-on-surface">
-                        {formatUnits(borrowPreview.totalAvailable, selectedMarketData?.borrow_asset.decimals || 6)} {selectedMarketData?.borrow_asset.symbol}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-on-surface-variant">Your weighted APR:</span>
-                      <span className="text-lg font-bold text-primary">{formatAPR(Number(borrowPreview.weightedApr))}</span>
-                    </div>
-                  </div>
-
-                  {borrowPreview.offers.length > 0 && (
-                    <div className="mt-4 pt-3 border-t border-primary/20">
-                      <p className="text-xs font-semibold text-on-surface-variant mb-2">Offers that will be filled:</p>
-                      <div className="space-y-1 max-h-32 overflow-y-auto">
-                        {borrowPreview.offers.slice(0, 5).map((offer: any, idx: number) => (
-                          <div key={idx} className="flex justify-between text-xs py-1">
-                            <span className="text-on-surface-variant">Offer #{offer.id?.toString() || idx + 1}</span>
-                            <span className="text-on-surface">
-                              {formatUnits(offer.remainingAmount || offer.amount, selectedMarketData?.borrow_asset.decimals || 6)} @ {formatAPR(Number(offer.apr))}
-                            </span>
-                          </div>
-                        ))}
-                        {borrowPreview.offers.length > 5 && (
-                          <p className="text-xs text-on-surface-variant italic">+ {borrowPreview.offers.length - 5} more offers...</p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Warnings */}
-                  {borrowPreview.totalAvailable < BigInt(parseFloat(borrowAmount) * 1e6) && (
-                    <div className="mt-3 p-3 bg-amber-400/10 border border-amber-400/30 rounded">
-                      <p className="text-xs text-amber-400 font-semibold">
-                        ⚠️ Insufficient liquidity! Only {formatUnits(borrowPreview.totalAvailable, selectedMarketData?.borrow_asset.decimals || 6)} {selectedMarketData?.borrow_asset.symbol} available.
-                      </p>
-                      <p className="text-xs text-on-surface-variant mt-1">
-                        Reduce amount or wait for more offers.
-                      </p>
-                    </div>
-                  )}
-
-                  {borrowPreview.weightedApr > BigInt(maxAPR) && (
-                    <div className="mt-3 p-3 bg-red-400/10 border border-red-400/30 rounded">
-                      <p className="text-xs text-red-400 font-semibold">
-                        ❌ Weighted APR ({formatAPR(Number(borrowPreview.weightedApr))}) exceeds your max APR ({formatAPR(parseInt(maxAPR))})!
-                      </p>
-                      <p className="text-xs text-on-surface-variant mt-1">
-                        Increase max APR or reduce borrow amount.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <p className="text-sm text-red-400">No offers available for this amount</p>
                 </div>
               )}
             </Card>
@@ -591,7 +528,7 @@ function BorrowContent() {
                         <span className="text-xs font-mono">{formatAddress(offer.lender)}</span>
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        {(parseFloat(offer.remaining_amount || offer.amount) / 1e6).toFixed(2)} {selectedMarketData?.borrow_asset.symbol}
+                        {formatTokenAmount(offer.remaining_amount || offer.amount, selectedMarketData?.borrow_asset.decimals)} {selectedMarketData?.borrow_asset.symbol}
                       </TableCell>
                       <TableCell className="text-right">
                         <span className="text-primary font-semibold">{formatAPR(offer.apr)}</span>
@@ -773,15 +710,21 @@ function BorrowContent() {
           <Input
             label="Max APR (BPS)"
             type="number"
+            min="0"
+            step="1"
             placeholder="1000"
             value={maxAPR}
-            onChange={(e) => setMaxAPR(e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value;
+              // BPS is a whole number (1250 = 12.50%) - reject decimal input
+              if (v === "" || /^\d+$/.test(v)) setMaxAPR(v);
+            }}
             hint={`= ${(parseInt(maxAPR || "0") / 100).toFixed(2)}% ${borrowPreview ? `(Actual: ${formatAPR(Number(borrowPreview.weightedApr))})` : ''}`}
           />
           <div className="rounded-lg bg-surface-container-low p-3 space-y-1.5 text-sm">
             <div className="flex justify-between">
               <span className="text-on-surface-variant">Health Factor</span>
-              <span className={hfColor}>{healthFactor.toFixed(2)}</span>
+              <span className={hfColor}>{hasNoDebt ? "∞ (no debt)" : healthFactorUnknown ? "Unable to verify" : healthFactor.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-on-surface-variant">Market APR</span>
@@ -800,17 +743,17 @@ function BorrowContent() {
               !isMarketBorrower ||
               !borrowAmount ||
               !!(totalDebt && totalDebt > BigInt(0)) ||
-              (borrowPreview && borrowPreview.totalAvailable < BigInt(parseFloat(borrowAmount) * Math.pow(10, selectedMarketData?.borrow_asset.decimals || 6))) ||
-              (borrowPreview && borrowPreview.weightedApr > BigInt(maxAPR))
+              (borrowPreview && borrowPreview.totalAvailable < requiredBorrowWei) ||
+              (borrowPreview && borrowPreview.weightedApr > maxAPRBigInt)
             }
           >
             {!isMarketBorrower && selectedMarket
               ? "Not Authorized"
               : totalDebt && totalDebt > BigInt(0)
               ? "Repay Existing Debt First"
-              : borrowPreview && borrowPreview.totalAvailable < BigInt(parseFloat(borrowAmount || "0") * Math.pow(10, selectedMarketData?.borrow_asset.decimals || 6))
+              : borrowPreview && borrowPreview.totalAvailable < requiredBorrowWei
               ? "Insufficient Liquidity"
-              : borrowPreview && borrowPreview.weightedApr > BigInt(maxAPR)
+              : borrowPreview && borrowPreview.weightedApr > maxAPRBigInt
               ? "APR Exceeds Max"
               : "Execute Borrow"}
           </Button>
@@ -831,14 +774,14 @@ function BorrowContent() {
             <div className="flex justify-between text-xs">
               <span className="text-on-surface-variant">Principal</span>
               <span className="text-on-surface font-mono">
-                ${((parseFloat(borrower?.total_borrowed ?? "0") - parseFloat(borrower?.total_repaid ?? "0")) / 1e6).toFixed(2)}M
+                {principalDecimal.toFixed(2)} {selectedMarketData?.borrow_asset.symbol}
               </span>
             </div>
 
             <div className="flex justify-between text-xs">
               <span className="text-on-surface-variant">Accrued Interest</span>
               <span className="text-amber-400 font-mono">
-                +${(accruedInterest / 1e6).toFixed(4)}M
+                +{accruedInterestDecimal.toFixed(4)} {selectedMarketData?.borrow_asset.symbol}
               </span>
             </div>
 
@@ -846,12 +789,12 @@ function BorrowContent() {
               <span className="text-xs font-semibold text-on-surface-variant">Total Owed</span>
               <div className="flex items-center gap-2">
                 <span className="text-sm font-bold text-on-surface font-mono">
-                  ${(totalDebtWithInterest / 1e6).toFixed(4)}M
+                  {totalDebtDecimal.toFixed(4)} {selectedMarketData?.borrow_asset.symbol}
                 </span>
                 <Button
                   size="sm"
                   variant="secondary"
-                  onClick={() => setRepayAmount(totalDebtWithInterest.toString())}
+                  onClick={() => setRepayAmount(totalDebtDecimal.toString())}
                 >
                   Full Amount
                 </Button>
@@ -861,11 +804,16 @@ function BorrowContent() {
           <Input
             label={`Repay Amount (${selectedMarketData?.borrow_asset.symbol ?? "USDC"})`}
             type="number"
+            min="0"
+            step="any"
             placeholder="0.00"
             value={repayAmount}
-            onChange={(e) => setRepayAmount(e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "" || parseFloat(v) >= 0) setRepayAmount(v);
+            }}
             suffix={selectedMarketData?.borrow_asset.symbol ?? "USDC"}
-            hint={`Enter amount to repay (min: cover interest of ${(accruedInterest / 1e6).toFixed(4)}M). Partial payments allowed.`}
+            hint={`Enter amount to repay (min: cover interest of ${accruedInterestDecimal.toFixed(4)} ${selectedMarketData?.borrow_asset.symbol ?? ""}). Partial payments allowed.`}
           />
           <div className="flex gap-2">
             <Button
@@ -905,7 +853,9 @@ function BorrowContent() {
           <Card className="p-5 space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Market Health</p>
-              {marketHealth.isHealthy ? (
+              {marketHealth.isError ? (
+                <AlertTriangle className="h-4 w-4 text-on-surface-variant" />
+              ) : marketHealth.isHealthy ? (
                 <CheckCircle2 className="h-4 w-4 text-emerald-400" />
               ) : (
                 <XCircle className="h-4 w-4 text-red-400" />
@@ -915,23 +865,25 @@ function BorrowContent() {
               <div className="flex justify-between">
                 <span className="text-on-surface-variant">Collateral Ratio</span>
                 <span className="font-mono text-on-surface">
-                  {marketHealth.collateralRatio ?
-                    `${(Number(marketHealth.collateralRatio) / 100).toFixed(2)}%` :
-                    '—'}
+                  {hasNoDebt
+                    ? "∞ (no debt)"
+                    : marketHealth.collateralRatio !== undefined
+                      ? `${(Number(marketHealth.collateralRatio) / 100).toFixed(2)}%`
+                      : '—'}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-on-surface-variant">Total Owed (On-Chain)</span>
                 <span className="font-mono text-on-surface">
-                  {marketHealth.totalOwed ?
+                  {marketHealth.totalOwed !== undefined ?
                     `${formatUnits(marketHealth.totalOwed, selectedMarketData?.borrow_asset.decimals || 6)} ${selectedMarketData?.borrow_asset.symbol}` :
                     '—'}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-on-surface-variant">Liquidatable</span>
-                <span className={marketHealth.isLiquidatable ? 'text-red-400 font-semibold' : 'text-emerald-400'}>
-                  {marketHealth.isLiquidatable ? 'Yes - At Risk!' : 'No'}
+                <span className={marketHealth.isError ? 'text-on-surface-variant' : marketHealth.isLiquidatable ? 'text-red-400 font-semibold' : 'text-emerald-400'}>
+                  {marketHealth.isError ? 'Unable to verify' : marketHealth.isLiquidatable ? 'Yes - At Risk!' : 'No'}
                 </span>
               </div>
             </div>
@@ -940,7 +892,7 @@ function BorrowContent() {
             {marketHealth.totalOwed === BigInt(0) && (
               <div className="pt-4 border-t border-outline-variant/20">
                 <p className="text-xs text-on-surface-variant mb-2">
-                  ✅ All debt repaid. You can now close this market.
+                  ✅ No outstanding debt on this market. You can close it if you no longer plan to borrow here.
                 </p>
                 <Button
                   variant="outline"
@@ -974,9 +926,9 @@ function BorrowContent() {
             <div className="rounded-lg bg-surface-container-low p-3">
               <p className="text-xs text-on-surface-variant mb-1">Liquidation Price</p>
               <p className="text-lg font-bold mono text-on-surface">
-                {simLiquidationPrice > 0 ? `$${simLiquidationPrice.toFixed(0)}` : "—"}
+                {simLiquidationPrice > 0 ? `${simLiquidationPrice.toFixed(4)} ${selectedMarketData?.borrow_asset.symbol ?? ""}` : "—"}
               </p>
-              <p className="text-[10px] text-on-surface-variant">per WETH</p>
+              <p className="text-[10px] text-on-surface-variant">per {selectedMarketData?.collateral_asset.symbol ?? "unit"}</p>
             </div>
             <div className="rounded-lg bg-surface-container-low p-3">
               <p className="text-xs text-on-surface-variant mb-1">Borrow Power Used</p>
@@ -987,7 +939,9 @@ function BorrowContent() {
             <div className="rounded-lg bg-surface-container-low p-3">
               <p className="text-xs text-on-surface-variant mb-1">Max Borrowable</p>
               <p className="text-lg font-bold mono text-on-surface">
-                ${simMaxBorrow > 0 ? (simMaxBorrow >= 1000 ? `${(simMaxBorrow / 1000).toFixed(1)}K` : simMaxBorrow.toFixed(0)) : "—"}
+                {simMaxBorrow > 0
+                  ? `${simMaxBorrow >= 1000 ? `${(simMaxBorrow / 1000).toFixed(1)}K` : simMaxBorrow.toFixed(2)} ${selectedMarketData?.borrow_asset.symbol ?? ""}`
+                  : "—"}
               </p>
             </div>
           </div>
@@ -1010,52 +964,6 @@ function BorrowContent() {
         </Card>
       )}
 
-      {/* Active Positions */}
-      <Card>
-        <div className="flex items-center justify-between p-5 pb-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Active Positions</p>
-            <p className="text-xs text-on-surface-variant mt-0.5">Your active lending positions across markets</p>
-          </div>
-        </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Asset</TableHead>
-              <TableHead className="text-right">Principal</TableHead>
-              <TableHead>Market</TableHead>
-              <TableHead className="text-right">APR</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {positions?.positions.length ? (
-              positions.positions.map((pos) => (
-                <TableRow key={pos.token_id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <div className="h-7 w-7 rounded-full bg-primary-container/15 flex items-center justify-center text-xs font-bold text-primary">
-                        #{pos.token_id}
-                      </div>
-                      <span className="text-sm font-medium">Token {pos.token_id}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right mono">${(parseFloat(pos.principal) / 1e6).toFixed(4)}M</TableCell>
-                  <TableCell className="text-sm text-on-surface-variant mono">{formatAddress(pos.market_address, 4)}</TableCell>
-                  <TableCell className="text-right"><span className="text-primary font-bold">{formatAPR(pos.apr)}</span></TableCell>
-                  <TableCell><StatusBadge status={pos.status} /></TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={5}>
-                  <EmptyState title="No active positions" description="Deposit collateral and execute a borrow to get started" />
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </Card>
     </div>
   );
 }

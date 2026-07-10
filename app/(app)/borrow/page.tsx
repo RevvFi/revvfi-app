@@ -576,7 +576,12 @@ function BorrowContent() {
                 {parseFloat(collateralFormatted).toFixed(4)} {selectedMarketData?.collateral_asset.symbol || "WETH"}
               </p>
               <p className="text-xs text-on-surface-variant mt-1">
-                ≈ ${(parseFloat(collateralFormatted) * 2000).toFixed(2)} USD
+                {oracleReady && collateralToBorrowUnits && marketCollateral
+                  ? `≈ ${Number(formatUnits(
+                      collateralToBorrowUnits(marketCollateral),
+                      selectedMarketData?.borrow_asset.decimals ?? 18
+                    )).toFixed(4)} ${selectedMarketData?.borrow_asset.symbol ?? ""} (via oracle)`
+                  : "Fetching live oracle price…"}
               </p>
             </div>
           )}

@@ -92,11 +92,18 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
 
   const utilizationPct = market.utilization_rate * 100;
 
-  // Displayed health factor: prefer on-chain value, fall back to API
+  // Displayed health factor: prefer on-chain value, fall back to API.
+  // Zero debt means the contract's getCollateralRatio() sentinel (an
+  // "infinite ratio") applies - hasNoDebt is set explicitly by
+  // useLiquidationStatus rather than inferred from the raw number, since the
+  // raw number in that case is astronomically large but still finite.
+  const hasNoDebt = liquidationStatus?.hasNoDebt ?? false;
   const displayedHealthFactor =
     liquidationStatus?.healthFactor ?? risk?.health_factor ?? null;
 
-  const hfColor = !displayedHealthFactor
+  const hfColor = hasNoDebt
+    ? "text-emerald-400"
+    : !displayedHealthFactor
     ? "text-on-surface-variant"
     : displayedHealthFactor >= 2.0
     ? "text-emerald-400"
@@ -162,7 +169,7 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
         {[
           {
             label: "Health Factor",
-            value: displayedHealthFactor ? displayedHealthFactor.toFixed(3) : "—",
+            value: hasNoDebt ? "∞ (no debt)" : displayedHealthFactor ? displayedHealthFactor.toFixed(3) : "—",
             sub: "Liquidation at < 1.00",
             color: hfColor,
           },
@@ -238,7 +245,7 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
               <div>
                 <p className="text-xs text-on-surface-variant mb-1">Health Factor</p>
                 <p className={`text-2xl font-bold mono ${hfColor}`}>
-                  {liquidationStatus.healthFactor.toFixed(3)}
+                  {liquidationStatus.hasNoDebt ? "∞ (no debt)" : liquidationStatus.healthFactor.toFixed(3)}
                 </p>
               </div>
               <div>

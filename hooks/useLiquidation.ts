@@ -26,6 +26,13 @@ const LIQUIDATION_STATUS_ABI = [
     inputs: [],
     outputs: [{ type: "uint256" }],
   },
+  {
+    name: "getTotalOwed",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
 ] as const;
 
 const LIQUIDATE_ABI = [
@@ -49,7 +56,7 @@ export function useLiquidationStatus(marketAddress?: string) {
       if (!marketAddress || !publicClient) return null;
       const addr = marketAddress as `0x${string}`;
 
-      const [isLiquidatable, collateralRatio] = await Promise.all([
+      const [isLiquidatable, collateralRatio, totalOwed] = await Promise.all([
         publicClient.readContract({
           address: addr,
           abi: LIQUIDATION_STATUS_ABI,
@@ -60,12 +67,22 @@ export function useLiquidationStatus(marketAddress?: string) {
           abi: LIQUIDATION_STATUS_ABI,
           functionName: "getCollateralRatio",
         }),
+        publicClient.readContract({
+          address: addr,
+          abi: LIQUIDATION_STATUS_ABI,
+          functionName: "getTotalOwed",
+        }),
       ]);
 
+      // With zero debt, getCollateralRatio() returns a type(uint256).max
+      // sentinel ("infinite ratio") - dividing that by 10000 for display
+      // produces a meaningless ~1.16e73 instead of an actual health factor.
+      // Represent it as Infinity and let callers render "no debt" instead.
+      const hasNoDebt = (totalOwed as bigint) === BigInt(0);
       // collateralRatio is basis points (e.g. 12000 = 120%)
       // Divide by 10000 → ratio where < 1.0 means liquidatable
-      const healthFactor = Number(collateralRatio) / 10000;
-      return { isLiquidatable, healthFactor };
+      const healthFactor = hasNoDebt ? Infinity : Number(collateralRatio) / 10000;
+      return { isLiquidatable, healthFactor, hasNoDebt };
     },
     enabled: !!marketAddress && !!publicClient,
     refetchInterval: 15_000,

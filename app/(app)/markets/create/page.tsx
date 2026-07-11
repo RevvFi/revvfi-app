@@ -42,7 +42,7 @@ const ORACLES_BY_COLLATERAL: Record<string, { name: string; address: string; des
   [CONTRACT_ADDRESSES.usdc]: {
     name: "Mock Oracle (USDC collateral)",
     address: CONTRACT_ADDRESSES.collateralOracleUsdc,
-    desc: "Fixed price: 1 USDC = 0.0005 units of the borrow asset (the reciprocal of the WETH oracle above).",
+    desc: "Fixed price: 1 USDC = a small fixed amount of the borrow asset (the reciprocal of the WETH oracle above, calibrated at deployment time - not live).",
   },
 };
 
@@ -72,8 +72,14 @@ export default function CreateMarketPage() {
 
   const borrowAsset = ASSETS.find((a) => a.address === form.borrow_asset);
   const collateralAsset = ASSETS.find((a) => a.address === form.collateral_asset);
-  // Derived, not user-selected - see ORACLES_BY_COLLATERAL above.
-  const selectedOracle = ORACLES_BY_COLLATERAL[form.collateral_asset];
+  // Derived, not user-selected - see ORACLES_BY_COLLATERAL above. An entry
+  // can exist with an empty `.address` when its oracle env var isn't set for
+  // this network (e.g. only one pricing direction has a real feed deployed
+  // on testnet/mainnet, unlike localnet which mocks both) - treat that the
+  // same as no oracle being available at all, rather than silently wiring a
+  // market to an empty/wrong address.
+  const rawOracle = ORACLES_BY_COLLATERAL[form.collateral_asset];
+  const selectedOracle = rawOracle && isAddress(rawOracle.address) ? rawOracle : undefined;
 
   // Decimals are read directly from each ERC20 contract, never hand-entered -
   // a mismatch here would silently corrupt every amount calculation the
@@ -225,14 +231,28 @@ export default function CreateMarketPage() {
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant block mb-3">Collateral Asset</label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {ASSETS.map((a) => (
-                    <button key={a.address}
-                      onClick={() => setField("collateral_asset", a.address)}
-                      className={cn("rounded-lg border p-3 text-left transition-all", form.collateral_asset === a.address ? "border-primary-container/60 bg-primary-container/10" : "border-outline-variant/20 hover:border-outline-variant/40")}>
-                      <p className="text-sm font-bold text-on-surface">{a.symbol}</p>
-                      <p className="text-xs text-on-surface-variant">{a.name}</p>
-                    </button>
-                  ))}
+                  {ASSETS.map((a) => {
+                    const oracleAvailable = isAddress(ORACLES_BY_COLLATERAL[a.address]?.address ?? "");
+                    return (
+                      <button key={a.address}
+                        disabled={!oracleAvailable}
+                        onClick={() => setField("collateral_asset", a.address)}
+                        title={oracleAvailable ? undefined : "No price oracle configured for this collateral asset on this network"}
+                        className={cn(
+                          "rounded-lg border p-3 text-left transition-all",
+                          !oracleAvailable
+                            ? "opacity-40 cursor-not-allowed border-outline-variant/20"
+                            : form.collateral_asset === a.address
+                              ? "border-primary-container/60 bg-primary-container/10"
+                              : "border-outline-variant/20 hover:border-outline-variant/40"
+                        )}>
+                        <p className="text-sm font-bold text-on-surface">{a.symbol}</p>
+                        <p className="text-xs text-on-surface-variant">
+                          {oracleAvailable ? a.name : "No oracle available"}
+                        </p>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

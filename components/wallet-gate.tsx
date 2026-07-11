@@ -1,20 +1,19 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { Github } from "lucide-react";
 import { useAccount, useConnect } from "wagmi";
 import { markExplicitConnectIntent } from "@/lib/connect-intent";
-import { GITHUB_ORG_URL } from "@/constants/links";
+import { GITHUB_ORG_URL, LANDING_URL } from "@/constants/links";
 
 const LEGAL_LINKS = [
-  { href: "/about", label: "About" },
-  { href: "/team", label: "Team" },
-  { href: "/invest", label: "Invest" },
-  { href: "/contribute", label: "Contribute" },
-  { href: "/contact", label: "Contact" },
-  { href: "/terms", label: "Terms" },
-  { href: "/privacy", label: "Privacy" },
+  { href: LANDING_URL, label: "About" },
+  { href: `${LANDING_URL}/team`, label: "Team" },
+  { href: `${LANDING_URL}/invest`, label: "Invest" },
+  { href: `${LANDING_URL}/contribute`, label: "Contribute" },
+  { href: `${LANDING_URL}/contact`, label: "Contact" },
+  { href: `${LANDING_URL}/terms`, label: "Terms" },
+  { href: `${LANDING_URL}/privacy`, label: "Privacy" },
 ];
 
 interface WalletGateProps {
@@ -124,13 +123,13 @@ export function WalletPrompt({
       {/* Company links */}
       <nav className="mt-10 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5">
         {LEGAL_LINKS.map((l) => (
-          <Link
+          <a
             key={l.href}
             href={l.href}
             className="text-xs text-on-surface-variant/60 hover:text-on-surface-variant transition-colors"
           >
             {l.label}
-          </Link>
+          </a>
         ))}
       </nav>
     </div>

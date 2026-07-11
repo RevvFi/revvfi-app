@@ -22,6 +22,7 @@ import {
   Award, CheckCircle, Loader2, Gavel,
 } from "lucide-react";
 import type { Auction } from "@/types";
+import { LANDING_URL } from "@/constants/links";
 
 export default function SettingsPage() {
   const { address, isConnected, chain } = useAccount();
@@ -383,17 +384,17 @@ export default function SettingsPage() {
       {/* Legal */}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-1">
         {[
-          { href: "/about", label: "About" },
-          { href: "/team", label: "Team" },
-          { href: "/invest", label: "Invest" },
-          { href: "/contribute", label: "Contribute" },
-          { href: "/contact", label: "Contact" },
-          { href: "/terms", label: "Terms" },
-          { href: "/privacy", label: "Privacy" },
+          { href: LANDING_URL, label: "About" },
+          { href: `${LANDING_URL}/team`, label: "Team" },
+          { href: `${LANDING_URL}/invest`, label: "Invest" },
+          { href: `${LANDING_URL}/contribute`, label: "Contribute" },
+          { href: `${LANDING_URL}/contact`, label: "Contact" },
+          { href: `${LANDING_URL}/terms`, label: "Terms" },
+          { href: `${LANDING_URL}/privacy`, label: "Privacy" },
         ].map((l) => (
-          <Link key={l.href} href={l.href} className="text-xs text-on-surface-variant hover:text-on-surface transition-colors">
+          <a key={l.href} href={l.href} className="text-xs text-on-surface-variant hover:text-on-surface transition-colors">
             {l.label}
-          </Link>
+          </a>
         ))}
       </div>
     </div>

@@ -10,6 +10,7 @@ import { ConnectWalletButton } from "@/components/wallet/ConnectWalletButton";
 import { Settings, Menu, X, Search } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
 import { localChain, CHAIN_NAMES } from "@/constants/chains";
+import { LANDING_URL } from "@/constants/links";
 
 const NAV_ITEMS = [
   { href: "/dashboard",  label: "Dashboard"  },
@@ -62,9 +63,9 @@ export function TopNav() {
         className="flex h-16 shrink-0 items-stretch border-b border-outline-variant bg-background"
         style={{ zIndex: 50 }}
       >
-        {/* Logo */}
-        <Link
-          href="/dashboard"
+        {/* Logo — links out to the marketing site, not back into the app */}
+        <a
+          href={LANDING_URL}
           className="flex items-center gap-2 px-4 shrink-0 hover:bg-surface-container transition-colors"
         >
           <Image
@@ -78,7 +79,7 @@ export function TopNav() {
           <span className="text-sm font-bold text-on-surface tracking-tight select-none hidden sm:block">
             Revv<span className="text-primary">Fi</span>
           </span>
-        </Link>
+        </a>
 
         {/* Desktop nav — hidden on mobile */}
         <nav className="hidden md:flex items-stretch flex-1 overflow-x-auto">
@@ -201,19 +202,11 @@ export function TopNav() {
           </div>
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-6 pb-4 text-[11px] text-on-surface-variant/70">
-            {[
-              { href: "/about", label: "About" },
-              { href: "/team", label: "Team" },
-              { href: "/invest", label: "Invest" },
-              { href: "/contribute", label: "Contribute" },
-              { href: "/contact", label: "Contact" },
-              { href: "/terms", label: "Terms" },
-              { href: "/privacy", label: "Privacy" },
-            ].map((l) => (
-              <Link key={l.href} href={l.href} onClick={() => setMobileOpen(false)}>
-                {l.label}
-              </Link>
-            ))}
+            <a href={LANDING_URL}>About</a>
+            <a href={`${LANDING_URL}/team`}>Team</a>
+            <a href={`${LANDING_URL}/contact`}>Contact</a>
+            <a href={`${LANDING_URL}/terms`}>Terms</a>
+            <a href={`${LANDING_URL}/privacy`}>Privacy</a>
           </div>
         </div>
       )}

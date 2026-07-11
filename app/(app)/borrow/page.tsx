@@ -729,7 +729,7 @@ function BorrowContent() {
           <div className="rounded-lg bg-surface-container-low p-3 space-y-1.5 text-sm">
             <div className="flex justify-between">
               <span className="text-on-surface-variant">Health Factor</span>
-              <span className={hfColor}>{hasNoDebt ? "∞ (no debt)" : healthFactorUnknown ? "Unable to verify" : healthFactor.toFixed(2)}</span>
+              <span className={hfColor}>{hasNoDebt ? "No active debt" : healthFactorUnknown ? "Unable to verify" : healthFactor.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-on-surface-variant">Market APR</span>
@@ -871,7 +871,7 @@ function BorrowContent() {
                 <span className="text-on-surface-variant">Collateral Ratio</span>
                 <span className="font-mono text-on-surface">
                   {hasNoDebt
-                    ? "∞ (no debt)"
+                    ? "No active debt"
                     : marketHealth.collateralRatio !== undefined
                       ? `${(Number(marketHealth.collateralRatio) / 100).toFixed(2)}%`
                       : '—'}

@@ -20,6 +20,13 @@ const ESCROW_ABI = [
   },
   {
     "inputs": [],
+    "name": "liquidationThreshold",
+    "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "collateralOracle",
     "outputs": [{"internalType": "address", "name": "", "type": "address"}],
     "stateMutability": "view",
@@ -128,6 +135,28 @@ export function useMinCollateralRatio(marketAddress: Address | undefined) {
     query: {
       enabled: !!escrowAddress,
       refetchInterval: 60_000, // ratio rarely changes
+    },
+    chainId: localChain.id,
+  });
+}
+
+// Get liquidation threshold
+export function useLiquidationThreshold(marketAddress: Address | undefined) {
+  const { data: escrowAddress } = useReadContract({
+    address: marketAddress,
+    abi: MARKET_ABI,
+    functionName: 'collateralEscrow',
+    query: { enabled: !!marketAddress },
+    chainId: localChain.id,
+  });
+
+  return useReadContract({
+    address: escrowAddress as Address,
+    abi: ESCROW_ABI,
+    functionName: 'liquidationThreshold',
+    query: {
+      enabled: !!escrowAddress,
+      refetchInterval: 60_000, // threshold rarely changes
     },
     chainId: localChain.id,
   });

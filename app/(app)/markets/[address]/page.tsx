@@ -16,7 +16,7 @@ import {
   useIsLiquidating,
 } from "@/hooks/useLiquidation";
 import { usePlaceBid } from "@/hooks/useAuctions";
-import { useMarketCollateralBalance } from "@/hooks/useMarketCollateral";
+import { useMarketCollateralBalance, useLiquidationThreshold } from "@/hooks/useMarketCollateral";
 import { MarketParticipants } from "@/components/MarketParticipants";
 import { Card } from "@/components/ui/card";
 import { StatusBadge, RiskBadge } from "@/components/ui/badge";
@@ -47,6 +47,7 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
     market?.borrower as EvmAddress | undefined
   );
   const { data: maxBorrowableWei } = useMaxBorrowable(address as EvmAddress);
+  const { data: liquidationThresholdBps } = useLiquidationThreshold(address as EvmAddress);
 
   // Liquidation hooks
   const { data: liquidationStatus } = useLiquidationStatus(address);
@@ -169,8 +170,10 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
         {[
           {
             label: "Health Factor",
-            value: hasNoDebt ? "∞ (no debt)" : displayedHealthFactor ? displayedHealthFactor.toFixed(3) : "—",
-            sub: "Liquidation at < 1.00",
+            value: hasNoDebt ? "No active debt" : displayedHealthFactor ? displayedHealthFactor.toFixed(3) : "—",
+            sub: liquidationThresholdBps
+              ? `Liquidation below ${(Number(liquidationThresholdBps) / 10000).toFixed(2)}`
+              : "Liquidation threshold",
             color: hfColor,
           },
           {
@@ -245,12 +248,14 @@ export default function MarketDetailPage({ params }: { params: Promise<{ address
               <div>
                 <p className="text-xs text-on-surface-variant mb-1">Health Factor</p>
                 <p className={`text-2xl font-bold mono ${hfColor}`}>
-                  {liquidationStatus.hasNoDebt ? "∞ (no debt)" : liquidationStatus.healthFactor.toFixed(3)}
+                  {liquidationStatus.hasNoDebt ? "No active debt" : liquidationStatus.healthFactor.toFixed(3)}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-on-surface-variant mb-1">Liquidation Threshold</p>
-                <p className="text-2xl font-bold mono text-on-surface">1.000</p>
+                <p className="text-2xl font-bold mono text-on-surface">
+                  {liquidationThresholdBps ? (Number(liquidationThresholdBps) / 10000).toFixed(3) : "—"}
+                </p>
               </div>
             </div>
 

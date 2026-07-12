@@ -1,5 +1,5 @@
-export const LANDING_URL = process.env.NEXT_PUBLIC_LANDING_URL ?? "https://revvfi.xyz";
-export const FAUCET_URL = process.env.NEXT_PUBLIC_FAUCET_URL ?? "https://faucet.revvfi.xyz";
+export const LANDING_URL = process.env.NEXT_PUBLIC_LANDING_URL!;
+export const FAUCET_URL = process.env.NEXT_PUBLIC_FAUCET_URL!;
 
 export const GITHUB_ORG_URL = "https://github.com/RevvFi";
 

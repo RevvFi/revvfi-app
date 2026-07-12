@@ -37,8 +37,9 @@ function navCls(active: boolean) {
 export function TopNav() {
   const pathname = usePathname();
   const { user } = useAuthStore();
-  const { chain } = useAccount();
+  const { chain, isConnected } = useAccount();
   const activeChainName = CHAIN_NAMES[chain?.id ?? localChain.id] ?? localChain.name;
+  const isWrongNetwork = isConnected && chain !== undefined && chain.id !== localChain.id;
   const isAdmin = user?.role === "admin";
   const [mobileOpen, setMobileOpen] = useState(false);
   function openSearch() {
@@ -112,7 +113,7 @@ export function TopNav() {
             <kbd className="ml-auto rounded-md bg-surface-container-high px-1.5 py-0.5 text-[10px] font-mono leading-none">⌘K</kbd>
           </button>
 
-          {/* Network badge — icon + status dot only, no text */}
+          {/* Network badge — icon, name, and a status dot that flags a wrong network */}
           <div className="hidden lg:flex items-center gap-1.5 h-8 px-2.5 rounded-full border border-outline-variant select-none">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -122,7 +123,13 @@ export function TopNav() {
               height={16}
               className="rounded-full object-contain"
             />
-            <span className="h-1.5 w-1.5 rounded-full bg-[#22C55E] pulse-dot shrink-0" />
+            <span className="text-xs text-on-surface-variant whitespace-nowrap">{activeChainName}</span>
+            <span
+              className={cn(
+                "h-1.5 w-1.5 rounded-full pulse-dot shrink-0",
+                isWrongNetwork ? "bg-red-500" : "bg-[#22C55E]"
+              )}
+            />
           </div>
 
           {/* Settings */}
@@ -197,7 +204,7 @@ export function TopNav() {
               height={14}
               className="rounded-full object-contain"
             />
-            <span className="h-1.5 w-1.5 rounded-full bg-[#22C55E]" />
+            <span className={cn("h-1.5 w-1.5 rounded-full", isWrongNetwork ? "bg-red-500" : "bg-[#22C55E]")} />
             {activeChainName}
           </div>
 

@@ -22,6 +22,7 @@ import { useSIWE } from "@/hooks/useAuth";
 import { Info, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { MarketSelector } from "@/components/MarketSelector";
+import { TestnetFaucetBanner } from "@/components/TestnetFaucetBanner";
 
 export default function LendPage() {
   const { address } = useAccount();
@@ -100,6 +101,8 @@ export default function LendPage() {
           </p>
         </div>
       </div>
+
+      <TestnetFaucetBanner />
 
       {/* Top metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

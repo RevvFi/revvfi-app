@@ -22,7 +22,7 @@ import {
   Award, CheckCircle, Loader2, Gavel,
 } from "lucide-react";
 import type { Auction } from "@/types";
-import { LANDING_URL } from "@/constants/links";
+import { LANDING_URL, FAUCET_URL } from "@/constants/links";
 
 export default function SettingsPage() {
   const { address, isConnected, chain } = useAccount();
@@ -388,6 +388,7 @@ export default function SettingsPage() {
           { href: `${LANDING_URL}/team`, label: "Team" },
           { href: `${LANDING_URL}/invest`, label: "Invest" },
           { href: `${LANDING_URL}/contribute`, label: "Contribute" },
+          { href: FAUCET_URL, label: "Faucet" },
           { href: `${LANDING_URL}/contact`, label: "Contact" },
           { href: `${LANDING_URL}/terms`, label: "Terms" },
           { href: `${LANDING_URL}/privacy`, label: "Privacy" },

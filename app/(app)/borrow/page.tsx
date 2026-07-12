@@ -34,6 +34,7 @@ import { formatUnits, parseUnits } from "viem";
 import { useMyBorrowerRequest, useRequestBorrowerAccess } from "@/hooks/useBorrowerRequests";
 import { useAuthStore } from "@/store/auth.store";
 import { useSIWE } from "@/hooks/useAuth";
+import { TestnetFaucetBanner } from "@/components/TestnetFaucetBanner";
 
 function BorrowContent() {
   const { address } = useAccount();
@@ -295,6 +296,8 @@ function BorrowContent() {
           Access fixed-rate credit with enterprise-grade risk parameters
         </p>
       </div>
+
+      <TestnetFaucetBanner />
 
       {/* Not registered */}
       {address && !borrowerLoading && !borrower && (

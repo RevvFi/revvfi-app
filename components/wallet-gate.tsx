@@ -4,13 +4,14 @@ import Image from "next/image";
 import { Github } from "lucide-react";
 import { useAccount, useConnect } from "wagmi";
 import { markExplicitConnectIntent } from "@/lib/connect-intent";
-import { GITHUB_ORG_URL, LANDING_URL } from "@/constants/links";
+import { GITHUB_ORG_URL, LANDING_URL, FAUCET_URL } from "@/constants/links";
 
 const LEGAL_LINKS = [
   { href: LANDING_URL, label: "About" },
   { href: `${LANDING_URL}/team`, label: "Team" },
   { href: `${LANDING_URL}/invest`, label: "Invest" },
   { href: `${LANDING_URL}/contribute`, label: "Contribute" },
+  { href: FAUCET_URL, label: "Faucet" },
   { href: `${LANDING_URL}/contact`, label: "Contact" },
   { href: `${LANDING_URL}/terms`, label: "Terms" },
   { href: `${LANDING_URL}/privacy`, label: "Privacy" },

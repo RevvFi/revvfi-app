@@ -10,7 +10,7 @@ import { ConnectWalletButton } from "@/components/wallet/ConnectWalletButton";
 import { Settings, Menu, X, Search } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
 import { localChain, CHAIN_NAMES } from "@/constants/chains";
-import { LANDING_URL } from "@/constants/links";
+import { LANDING_URL, FAUCET_URL } from "@/constants/links";
 
 const NAV_ITEMS = [
   { href: "/dashboard",  label: "Dashboard"  },
@@ -204,6 +204,7 @@ export function TopNav() {
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-6 pb-4 text-[11px] text-on-surface-variant/70">
             <a href={LANDING_URL}>About</a>
             <a href={`${LANDING_URL}/team`}>Team</a>
+            <a href={FAUCET_URL}>Faucet</a>
             <a href={`${LANDING_URL}/contact`}>Contact</a>
             <a href={`${LANDING_URL}/terms`}>Terms</a>
             <a href={`${LANDING_URL}/privacy`}>Privacy</a>

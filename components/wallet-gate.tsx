@@ -1,9 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import { Github } from "lucide-react";
-import { useAccount, useConnect } from "wagmi";
-import { markExplicitConnectIntent } from "@/lib/connect-intent";
+import { useAccount } from "wagmi";
+import { WalletPickerDialog } from "@/components/wallet/WalletPickerDialog";
 import { GITHUB_ORG_URL, LANDING_URL, FAUCET_URL } from "@/constants/links";
 
 const LEGAL_LINKS = [
@@ -47,21 +48,7 @@ export function WalletPrompt({
   description?: string;
   fullPage?: boolean;
 }) {
-  const { connect, connectors, isPending } = useConnect();
-
-  const injected = connectors.find((c) => c.name.toLowerCase().includes("metamask") || c.type === "injected");
-  const first = injected ?? connectors[0];
-
-  // Sign-in (SIWE) is triggered centrally by AuthWalletSync, gated on the
-  // explicit-connect-intent flag marked here - this component unmounts
-  // itself the instant isConnected flips true (WalletGate swaps to
-  // rendering its children), so a local onSuccess callback here would never
-  // reliably fire.
-  function handleConnect() {
-    if (!first) return;
-    markExplicitConnectIntent();
-    connect({ connector: first });
-  }
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   return (
     <div
@@ -94,20 +81,21 @@ export function WalletPrompt({
 
       {/* CTA */}
       <button
-        onClick={handleConnect}
-        disabled={isPending || !first}
-        className="relative h-12 px-10 rounded-full text-sm font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.03] active:scale-[0.98]"
+        onClick={() => setPickerOpen(true)}
+        className="relative h-12 px-10 rounded-full text-sm font-semibold text-white transition-all hover:scale-[1.03] active:scale-[0.98]"
         style={{
           background: "linear-gradient(135deg, #FF8C47 0%, #FF6A00 50%, #E55F00 100%)",
           boxShadow: "0 4px 24px rgba(255,106,0,0.35), 0 1px 0 rgba(255,255,255,0.1) inset",
         }}
       >
-        {isPending ? "Connecting…" : "Connect Wallet"}
+        Connect Wallet
       </button>
+
+      <WalletPickerDialog open={pickerOpen} onOpenChange={setPickerOpen} />
 
       {/* Subtle hint */}
       <p className="mt-4 text-[11px] text-on-surface-variant/60">
-        MetaMask · Coinbase · Phantom
+        MetaMask · Coinbase · Phantom · any injected browser wallet
       </p>
 
       {/* GitHub */}

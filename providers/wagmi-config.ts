@@ -47,6 +47,11 @@ export const wagmiConfig = createConfig({
         };
       },
     }),
+    // Generic fallback (no `target`) - resolves to whatever `window.ethereum`
+    // actually is, so wallets that aren't MetaMask/Coinbase/Phantom (Rabby,
+    // Brave Wallet, Trust, OKX, etc.) still have a connector that can reach
+    // them instead of silently having no matching option.
+    injected(),
   ],
   transports,
   ssr: true,
